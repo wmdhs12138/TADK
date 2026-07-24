@@ -162,6 +162,25 @@ run_test "apk list function exists" \
         declare -F tadk_apk_list >/dev/null
     "
 
+run_test "tadk logcat --help" \
+    "$TADK_ROOT/bin/tadk" logcat --help
+
+run_test "compat bin/logcat --help" \
+    "$TADK_ROOT/bin/logcat" --help
+
+run_test "logcat implementation exists" \
+    test -x "$TADK_ROOT/commands/logcat.sh"
+
+run_test "logcat library exists" \
+    test -f "$TADK_ROOT/lib/logcat.sh"
+
+run_test "adb package pid function exists" \
+    bash -c "
+        source '$TADK_ROOT/lib/common.sh'
+        source '$TADK_ROOT/lib/adb.sh'
+        declare -F tadk_adb_package_pid >/dev/null
+    "
+
 printf '\n%s\n' '========================================'
 printf '通过：%d\n' "$PASS_COUNT"
 printf '失败：%d\n' "$FAIL_COUNT"

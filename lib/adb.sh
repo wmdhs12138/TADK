@@ -98,3 +98,64 @@ tadk_adb_force_stop_package() {
 
     adb shell am force-stop "$package_name"
 }
+
+tadk_adb_package_pid() {
+    local package_name="$1"
+    local package_pid=""
+
+    [[ -n "$package_name" ]] ||
+        tadk_die "应用包名不能为空"
+
+    tadk_adb_require_device ||
+        return 1
+
+    package_pid="$(
+        adb shell pidof "$package_name" 2>/dev/null |
+        tr -d '\r' |
+        awk '{print $1}'
+    )"
+
+    if [[ -z "$package_pid" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "$package_pid"
+}
+
+tadk_adb_clear_logcat() {
+    tadk_adb_require_device ||
+        return 1
+
+    adb logcat -c
+}
+
+tadk_adb_logcat_all() {
+    tadk_adb_require_device ||
+        return 1
+
+    adb logcat "$@"
+}
+
+tadk_adb_logcat_package() {
+    local package_name="$1"
+    local package_pid=""
+
+    shift
+
+    package_pid="$(
+        tadk_adb_package_pid "$package_name"
+    )" || return 1
+
+    adb logcat \
+        --pid="$package_pid" \
+        "$@"
+}
+
+tadk_adb_logcat_crash() {
+    tadk_adb_require_device ||
+        return 1
+
+    adb logcat \
+        -b crash \
+        "$@"
+}
