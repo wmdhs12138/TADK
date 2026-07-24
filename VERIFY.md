@@ -8,7 +8,7 @@ Run all commands from the TADK repository root.
 
 Expected:
 
-    TADK 0.3.0-alpha.15
+    TADK 0.3.0-alpha.16
 
 ## Static checks
 

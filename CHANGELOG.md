@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.0-alpha.16
+
+### Added
+
+- Added reusable independent Bash process test support through
+  `tests/helpers/process.sh`.
+- Added dedicated unit coverage for child-process exit-code capture and
+  `set -e` behavior.
+
+### Changed
+
+- Simplified Workflow errexit regression tests by centralizing
+  independent Bash process execution.
+- Updated release and verification documentation for Alpha.16.
+
+### Fixed
+
+- Workflow before hooks, step bodies and after hooks now propagate their
+  original failure status explicitly.
+- `workflow_run` now stops at the first failed step and preserves its
+  original exit status.
+- Fixed Workflow errexit regression tests that lost the trace-file path
+  inside Bash functions.
+
+### Compatibility
+
+- No user-facing command or option was removed.
+- Existing conditional Workflow skip semantics remain unchanged.
+- Existing `tadk dev` and `tadk run` behavior remains compatible.
+
 ## 0.3.0-alpha.15
 
 ### Added
