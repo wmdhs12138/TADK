@@ -8,6 +8,7 @@
 # Public API:
 #   test_run_unit TADK_ROOT
 #   test_run_smoke TADK_ROOT
+#   test_run_integration TADK_ROOT
 #   test_run_all TADK_ROOT
 #
 # Exit codes:
@@ -141,6 +142,21 @@ test_run_smoke() {
         "$tadk_root/tests/smoke.sh"
 }
 
+test_run_integration() {
+    if (( $# != 1 )); then
+        _test_error 'usage: test_run_integration TADK_ROOT'
+        return 64
+    fi
+
+    local tadk_root="$1"
+
+    _test_require_root "$tadk_root" || return $?
+
+    _test_run_runner \
+        integration \
+        "$tadk_root/tests/integration/run.sh"
+}
+
 test_run_all() {
     if (( $# != 1 )); then
         _test_error 'usage: test_run_all TADK_ROOT'
@@ -162,6 +178,15 @@ test_run_all() {
     printf '\n'
 
     test_run_smoke "$tadk_root"
+    exit_code=$?
+
+    if (( exit_code != 0 )); then
+        return "$exit_code"
+    fi
+
+    printf '\n'
+
+    test_run_integration "$tadk_root"
     exit_code=$?
 
     if (( exit_code != 0 )); then

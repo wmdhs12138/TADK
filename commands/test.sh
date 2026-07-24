@@ -22,6 +22,7 @@ usage() {
   all                 运行全部测试（默认）
   unit                只运行单元测试
   smoke               只运行冒烟测试
+  integration         只运行集成测试
 
 其他：
   -h, --help          显示帮助
@@ -31,6 +32,7 @@ usage() {
   tadk test all
   tadk test unit
   tadk test smoke
+  tadk test integration
 HELP
 }
 
@@ -42,7 +44,7 @@ fi
 
 if (( $# == 1 )); then
     case "$1" in
-        all|unit|smoke)
+        all|unit|smoke|integration)
             TEST_SUITE="$1"
             ;;
 
@@ -70,5 +72,9 @@ case "$TEST_SUITE" in
 
     smoke)
         test_run_smoke "$TADK_ROOT"
+        ;;
+
+    integration)
+        test_run_integration "$TADK_ROOT"
         ;;
 esac
