@@ -7,6 +7,7 @@ TEST_FILES=(
     "$TADK_ROOT/tests/integration/install-command.sh"
     "$TADK_ROOT/tests/integration/launch-command.sh"
     "$TADK_ROOT/tests/integration/logcat-command.sh"
+    "$TADK_ROOT/tests/integration/run-command.sh"
     "$TADK_ROOT/tests/integration/dev-command.sh"
 )
 PASSED=0 FAILED=0

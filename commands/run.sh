@@ -11,6 +11,7 @@ source "$TADK_ROOT/lib/apk.sh"
 source "$TADK_ROOT/lib/build.sh"
 source "$TADK_ROOT/lib/adb.sh"
 source "$TADK_ROOT/lib/android.sh"
+source "$TADK_ROOT/lib/workflow.sh"
 
 BUILD_TYPE="debug"
 INSTALL_MODE="open"
@@ -151,6 +152,97 @@ PROJECT_ROOT="$(tadk_require_project_root)"
 BUILD_TASK="$(tadk_build_task "$BUILD_TYPE")" ||
     tadk_die "无法确定构建任务"
 
+BUILD_DURATION=""
+APK_PATH=""
+APK_SIZE=""
+
+run_should_build_only() {
+    [[ "$INSTALL_MODE" == "none" ]]
+}
+
+run_should_open_installer() {
+    [[ "$INSTALL_MODE" == "open" ]]
+}
+
+run_should_adb_install() {
+    [[ "$INSTALL_MODE" == "adb" ]]
+}
+
+run_step_build() {
+    BUILD_DURATION="$(
+        tadk_build_execute \
+            "$PROJECT_ROOT" \
+            "$BUILD_TYPE" \
+            "$CLEAN_FIRST" \
+            "${GRADLE_EXTRA_ARGS[@]}"
+    )"
+}
+
+run_step_resolve_apk() {
+    APK_PATH="$(
+        tadk_apk_resolve \
+            "$PROJECT_ROOT" \
+            "$BUILD_TYPE"
+    )" || tadk_die "构建完成，但未找到 $BUILD_TYPE APK"
+
+    APK_SIZE="$(tadk_apk_size "$APK_PATH" || true)"
+}
+
+run_step_report() {
+    printf '\n'
+    tadk_success "构建成功，用时 ${BUILD_DURATION}s"
+    tadk_success "APK：$APK_PATH"
+    tadk_success "大小：${APK_SIZE:-未知}"
+}
+
+run_step_build_only() {
+    printf '\n仅构建模式，未执行安装。\n'
+}
+
+run_step_open_installer() {
+    printf '\n'
+    run_open_installer "$APK_PATH"
+}
+
+run_step_adb_install() {
+    printf '\n'
+    run_adb_install "$APK_PATH"
+}
+
+run_step_adb_launch() {
+    run_adb_launch "$PROJECT_ROOT"
+}
+
+run_step_complete() {
+    printf '\n完成。\n'
+}
+
+workflow_register build run_step_build
+workflow_register resolve-apk run_step_resolve_apk
+workflow_register report run_step_report
+
+workflow_register_if \
+    build-only \
+    run_should_build_only \
+    run_step_build_only
+
+workflow_register_if \
+    open-installer \
+    run_should_open_installer \
+    run_step_open_installer
+
+workflow_register_if \
+    adb-install \
+    run_should_adb_install \
+    run_step_adb_install
+
+workflow_register_if \
+    adb-launch \
+    run_should_adb_install \
+    run_step_adb_launch
+
+workflow_register complete run_step_complete
+
 tadk_heading "TADK Run"
 tadk_separator
 printf '项目：%s\n' "$PROJECT_ROOT"
@@ -168,46 +260,12 @@ fi
 tadk_separator
 printf '\n'
 
-BUILD_DURATION="$(
-    tadk_build_execute \
-        "$PROJECT_ROOT" \
-        "$BUILD_TYPE" \
-        "$CLEAN_FIRST" \
-        "${GRADLE_EXTRA_ARGS[@]}"
-)"
-
-APK_PATH="$(
-    tadk_apk_resolve \
-        "$PROJECT_ROOT" \
-        "$BUILD_TYPE"
-)" || tadk_die "构建完成，但未找到 $BUILD_TYPE APK"
-
-APK_SIZE="$(tadk_apk_size "$APK_PATH" || true)"
-
-printf '\n'
-tadk_success "构建成功，用时 ${BUILD_DURATION}s"
-tadk_success "APK：$APK_PATH"
-tadk_success "大小：${APK_SIZE:-未知}"
-
-case "$INSTALL_MODE" in
-    none)
-        printf '\n仅构建模式，未执行安装。\n'
-        ;;
-
-    open)
-        printf '\n'
-        run_open_installer "$APK_PATH"
-        ;;
-
-    adb)
-        printf '\n'
-        run_adb_install "$APK_PATH"
-        run_adb_launch "$PROJECT_ROOT"
-        ;;
-
-    *)
-        tadk_die "未知运行模式：$INSTALL_MODE"
-        ;;
-esac
-
-printf '\n完成。\n'
+workflow_run \
+    build \
+    resolve-apk \
+    report \
+    build-only \
+    open-installer \
+    adb-install \
+    adb-launch \
+    complete
