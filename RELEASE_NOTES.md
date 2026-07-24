@@ -1,94 +1,85 @@
-# TADK 0.3.0-alpha.15
+# TADK 0.3.0-alpha.16
 
-Alpha.15 completes the first production use of the TADK Workflow Engine
-across both primary Android development flows: `tadk dev` and
-`tadk run`.
+Alpha.16 strengthens Workflow Engine failure handling and improves the
+test infrastructure used to verify behavior under Bash `set -e`.
 
 ## Highlights
 
-### Conditional Workflow steps
+### Explicit Workflow failure propagation
 
-The Workflow Engine now supports:
+Workflow execution now preserves the original failure status from:
 
-    workflow_register_if STEP CONDITION_FUNCTION FUNCTION
+- before hooks;
+- the registered step function;
+- after hooks;
+- the first failed step in `workflow_run`.
 
-A conditional step:
+This prevents a later successful command from overwriting the real exit
+status.
 
-- runs only when its condition function succeeds;
-- skips its before hook, body and after hook when the condition fails;
-- continues with subsequent Workflow steps after a normal skip;
-- remains safe when the caller uses `set -e`;
-- validates registered functions during registration and execution.
+The execution rules are now explicit:
 
-### `tadk dev` Workflow improvements
+- a failed before hook stops the step body;
+- a failed step body skips all after hooks;
+- a failed after hook stops remaining after hooks;
+- `workflow_run` stops at the first failed step;
+- the original nonzero status is returned to the caller.
 
-The `clear-logcat` and `logcat` stages are now registered as conditional
-Workflow steps.
+### Errexit-safe regression coverage
 
-Existing behavior remains compatible:
+Workflow failure propagation is tested inside independent Bash
+processes with `set -e` enabled.
 
-- `--no-clear` skips old-log cleanup;
-- `--no-logcat` skips log monitoring;
-- skipped stages do not stop later Workflow steps;
-- output order remains unchanged.
+The regression coverage verifies that:
 
-### `tadk run` migration
+- before-hook status is preserved;
+- step-body status is preserved;
+- after-hook status is preserved;
+- later hooks do not run after failure;
+- later Workflow steps do not run after failure;
+- conditional skips remain safe under `set -e`.
 
-`tadk run` is now orchestrated by the Workflow Engine.
+### Reusable process test helper
 
-The flow consists of:
+Alpha.16 adds:
 
-    build
-    resolve-apk
-    report
-    build-only
-    open-installer
-    adb-install
-    adb-launch
-    complete
+    tests/helpers/process.sh
 
-Installation modes remain mutually exclusive:
+The `run_bash_errexit` helper:
 
-- default `open` mode uses `termux-open`;
-- `--build-only` performs no installation;
-- `--install` installs through ADB and attempts to launch the app.
+- launches an independent Bash process;
+- enables `set -e` inside that process;
+- passes arguments without relying on outer-function positional
+  parameters;
+- captures the child process status in `RUN_STATUS`;
+- avoids changing the caller's errexit state.
 
-No existing `tadk run` command-line option was removed or renamed.
+Dedicated unit tests cover:
 
-### Explicit Gradle failure propagation
+- missing script validation;
+- successful execution;
+- original failure-code preservation;
+- real errexit termination;
+- argument forwarding;
+- safe use when the caller also enables `set -e`.
 
-Gradle clean and build-task failures are now returned explicitly from
-the build library.
+### Test reliability fix
 
-This prevents later successful shell commands from accidentally
-overwriting the real Gradle exit status when the caller is capturing
-errors with `set +e` or another error-handling context.
+The first version of the Workflow errexit regression tests referenced
+`$2` inside test functions.
 
-### Unified testing
-
-The Alpha.14 unified test command is included in this release:
-
-    tadk test
-    tadk test all
-    tadk test unit
-    tadk test smoke
-    tadk test integration
-
-Alpha.15 adds integration coverage for:
-
-- default installer-open mode;
-- release build-only mode;
-- Gradle option forwarding;
-- ADB install and launch order;
-- build failure propagation;
-- stopping the Workflow before installation after a failed build.
+Inside a Bash function, positional parameters belong to that function,
+so the trace-file path became empty. Alpha.16 fixes this by capturing
+the subprocess argument in a named `trace_file` variable.
 
 ## Compatibility
 
 - No user-facing command was removed.
 - No existing option was renamed.
-- `tadk dev` and `tadk run` preserve their previous visible operation
-  order.
+- Conditional Workflow conditions still use nonzero status as a normal
+  skip.
+- Existing `tadk dev` and `tadk run` execution behavior remains
+  compatible.
 - TADK remains designed for Termux on ARM64 Android devices.
 
 ## Verification
@@ -100,4 +91,4 @@ Run:
 
 Expected version:
 
-    TADK 0.3.0-alpha.15
+    TADK 0.3.0-alpha.16
