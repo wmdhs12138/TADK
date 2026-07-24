@@ -127,6 +127,18 @@ run_test "compat bin/install --help" \
 run_test "install implementation exists" \
     test -x "$TADK_ROOT/commands/install.sh"
 
+run_test "tadk launch --help" \
+    "$TADK_ROOT/bin/tadk" launch --help
+
+run_test "compat bin/launch --help" \
+    "$TADK_ROOT/bin/launch" --help
+
+run_test "launch implementation exists" \
+    test -x "$TADK_ROOT/commands/launch.sh"
+
+run_test "android library exists" \
+    test -f "$TADK_ROOT/lib/android.sh"
+
 printf '\n%s\n' '========================================'
 printf '通过：%d\n' "$PASS_COUNT"
 printf '失败：%d\n' "$FAIL_COUNT"

@@ -10,6 +10,7 @@ source "$TADK_ROOT/lib/project.sh"
 source "$TADK_ROOT/lib/apk.sh"
 source "$TADK_ROOT/lib/build.sh"
 source "$TADK_ROOT/lib/adb.sh"
+source "$TADK_ROOT/lib/android.sh"
 
 BUILD_TYPE="debug"
 INSTALL_MODE="open"
@@ -42,28 +43,6 @@ usage() {
 HELP
 }
 
-get_application_id() {
-    local project_root="$1"
-    local gradle_file=""
-    local application_id=""
-
-    while IFS= read -r gradle_file; do
-        application_id="$(
-            sed -nE \
-                's/^[[:space:]]*applicationId[[:space:]]*=?[[:space:]]*"([^"]+)".*/\1/p' \
-                "$gradle_file" |
-                head -n 1
-        )"
-
-        if [[ -n "$application_id" ]]; then
-            printf '%s\n' "$application_id"
-            return 0
-        fi
-    done < <(tadk_project_build_files "$project_root")
-
-    return 1
-}
-
 run_open_installer() {
     local apk_path="$1"
 
@@ -88,23 +67,21 @@ run_adb_install() {
 
 run_adb_launch() {
     local project_root="$1"
-    local application_id=""
+    local package_name=""
 
-    application_id="$(
-        get_application_id "$project_root" || true
+    package_name="$(
+        tadk_android_package_name "$project_root" ||
+        true
     )"
 
-    if [[ -z "$application_id" ]]; then
+    if [[ -z "$package_name" ]]; then
         tadk_warn "无法识别 applicationId，已跳过启动"
         return 0
     fi
 
-    tadk_info "尝试启动 $application_id"
+    tadk_info "尝试启动 $package_name"
 
-    if adb shell monkey \
-        -p "$application_id" \
-        -c android.intent.category.LAUNCHER \
-        1 >/dev/null 2>&1; then
+    if tadk_adb_launch_package         "$package_name"         >/dev/null; then
         tadk_success "应用已启动"
     else
         tadk_warn "APK 已安装，但自动启动失败"

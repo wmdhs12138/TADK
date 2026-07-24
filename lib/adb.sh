@@ -56,3 +56,45 @@ tadk_adb_install_replace() {
         -r \
         "$@"
 }
+
+tadk_adb_package_installed() {
+    local package_name="$1"
+
+    tadk_adb_require_device ||
+        return 1
+
+    adb shell pm list packages "$package_name" 2>/dev/null |
+        grep -Fxq "package:$package_name"
+}
+
+tadk_adb_launch_package() {
+    local package_name="$1"
+
+    [[ -n "$package_name" ]] ||
+        tadk_die "应用包名不能为空"
+
+    tadk_adb_require_device ||
+        return 1
+
+    if ! tadk_adb_package_installed "$package_name"; then
+        tadk_error "设备上未安装应用：$package_name"
+        return 1
+    fi
+
+    adb shell monkey \
+        -p "$package_name" \
+        -c android.intent.category.LAUNCHER \
+        1
+}
+
+tadk_adb_force_stop_package() {
+    local package_name="$1"
+
+    [[ -n "$package_name" ]] ||
+        tadk_die "应用包名不能为空"
+
+    tadk_adb_require_device ||
+        return 1
+
+    adb shell am force-stop "$package_name"
+}

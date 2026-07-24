@@ -2,6 +2,7 @@ newapp|创建新的 Android Compose 项目|bin/newapp
 doctor|检查 Termux Android 开发环境|commands/doctor.sh
 build|构建当前 Android 项目的 APK|commands/build.sh
 install|通过 ADB 安装已有 APK|commands/install.sh
+launch|通过 ADB 启动已安装的 Android 应用|commands/launch.sh
 run|构建并运行当前 Android 项目|commands/run.sh
 clean|清理当前项目构建缓存|commands/clean.sh
 info|显示当前 Android 项目信息|commands/info.sh
