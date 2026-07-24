@@ -139,6 +139,29 @@ run_test "launch implementation exists" \
 run_test "android library exists" \
     test -f "$TADK_ROOT/lib/android.sh"
 
+run_test "tadk apk --help" \
+    "$TADK_ROOT/bin/tadk" apk --help
+
+run_test "compat bin/apk --help" \
+    "$TADK_ROOT/bin/apk" --help
+
+run_test "apk implementation exists" \
+    test -x "$TADK_ROOT/commands/apk.sh"
+
+run_test "apk resolve function exists" \
+    bash -c "
+        source '$TADK_ROOT/lib/common.sh'
+        source '$TADK_ROOT/lib/apk.sh'
+        declare -F tadk_apk_resolve >/dev/null
+    "
+
+run_test "apk list function exists" \
+    bash -c "
+        source '$TADK_ROOT/lib/common.sh'
+        source '$TADK_ROOT/lib/apk.sh'
+        declare -F tadk_apk_list >/dev/null
+    "
+
 printf '\n%s\n' '========================================'
 printf '通过：%d\n' "$PASS_COUNT"
 printf '失败：%d\n' "$FAIL_COUNT"

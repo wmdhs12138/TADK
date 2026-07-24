@@ -177,7 +177,7 @@ BUILD_DURATION="$(
 )"
 
 APK_PATH="$(
-    tadk_find_latest_apk \
+    tadk_apk_resolve \
         "$PROJECT_ROOT" \
         "$BUILD_TYPE"
 )" || tadk_die "构建完成，但未找到 $BUILD_TYPE APK"

@@ -49,15 +49,13 @@ resolve_apk_path() {
     local project_root=""
 
     if [[ -n "$APK_PATH" ]]; then
-        tadk_absolute_path "$APK_PATH"
+        tadk_apk_resolve             "${PWD}"             "$BUILD_TYPE"             "$APK_PATH"
         return
     fi
 
     project_root="$(tadk_require_project_root)"
 
-    tadk_find_latest_apk \
-        "$project_root" \
-        "$BUILD_TYPE"
+    tadk_apk_resolve         "$project_root"         "$BUILD_TYPE"
 }
 
 while [[ $# -gt 0 ]]; do

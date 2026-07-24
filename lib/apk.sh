@@ -48,3 +48,120 @@ tadk_apk_size() {
     du -h -- "$apk_path" 2>/dev/null |
         awk '{print $1}'
 }
+
+tadk_apk_validate_type() {
+    local build_type="$1"
+
+    case "$build_type" in
+        debug|release)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+tadk_apk_list() {
+    local project_root="$1"
+    local build_type="${2:-all}"
+
+    [[ -d "$project_root" ]] ||
+        return 1
+
+    case "$build_type" in
+        debug|release)
+            find "$project_root" \
+                -type f \
+                -path "*/build/outputs/apk/$build_type/*.apk" \
+                -print 2>/dev/null |
+                sort
+            ;;
+
+        all)
+            find "$project_root" \
+                -type f \
+                -path "*/build/outputs/apk/*/*.apk" \
+                -print 2>/dev/null |
+                sort
+            ;;
+
+        *)
+            return 1
+            ;;
+    esac
+}
+
+tadk_apk_count() {
+    local project_root="$1"
+    local build_type="${2:-all}"
+    local count=0
+
+    while IFS= read -r _apk_path; do
+        count=$((count + 1))
+    done < <(tadk_apk_list "$project_root" "$build_type")
+
+    printf '%s\n' "$count"
+}
+
+tadk_apk_resolve() {
+    local project_root="$1"
+    local build_type="$2"
+    local requested_path="${3:-}"
+    local resolved_path=""
+
+    tadk_apk_validate_type "$build_type" ||
+        return 1
+
+    if [[ -n "$requested_path" ]]; then
+        resolved_path="$(tadk_absolute_path "$requested_path")" ||
+            return 1
+
+        [[ -f "$resolved_path" ]] ||
+            return 1
+
+        case "$resolved_path" in
+            *.apk)
+                printf '%s\n' "$resolved_path"
+                return 0
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+    fi
+
+    tadk_find_latest_apk \
+        "$project_root" \
+        "$build_type"
+}
+
+tadk_apk_relative_path() {
+    local project_root="$1"
+    local apk_path="$2"
+
+    case "$apk_path" in
+        "$project_root"/*)
+            printf '%s\n' "${apk_path#"$project_root"/}"
+            ;;
+        *)
+            printf '%s\n' "$apk_path"
+            ;;
+    esac
+}
+
+tadk_apk_build_type_from_path() {
+    local apk_path="$1"
+
+    case "$apk_path" in
+        */build/outputs/apk/debug/*.apk)
+            printf '%s\n' "debug"
+            ;;
+        */build/outputs/apk/release/*.apk)
+            printf '%s\n' "release"
+            ;;
+        *)
+            printf '%s\n' "unknown"
+            ;;
+    esac
+}
