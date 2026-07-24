@@ -32,3 +32,22 @@ configured correctly:
 ```bash
 tadk doctor
 ```
+
+## Build and run an application
+
+Run this command from an Android project or any of its subdirectories:
+
+```bash
+tadk run
+```
+
+### Useful options:
+
+```bash
+tadk run --build-only
+tadk run --clean
+tadk run --install
+tadk run --release --build-only
+```
+
+By default, TADK builds a Debug APK and opens the Android package installer using termux-open.

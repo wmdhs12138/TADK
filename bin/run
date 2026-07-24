@@ -1,0 +1,286 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+set -Eeuo pipefail
+
+BUILD_TYPE="debug"
+INSTALL_MODE="open"
+CLEAN_FIRST=false
+GRADLE_EXTRA_ARGS=()
+
+usage() {
+    cat <<'HELP'
+用法：
+  tadk run [选项]
+
+选项：
+  --build-only       只构建 APK，不打开或安装
+  --install          使用 adb install -r 安装 APK
+  --open             使用 termux-open 打开安装界面（默认）
+  --clean            构建前先执行 clean
+  --release          构建 Release APK
+  --no-cache         禁用 Gradle 构建缓存
+  --rerun            强制重新执行所有任务
+  -h, --help         显示帮助
+
+示例：
+  tadk run
+  tadk run --clean
+  tadk run --build-only
+  tadk run --install
+  tadk run --release --build-only
+HELP
+}
+
+die() {
+    printf '\033[31m错误：%s\033[0m\n' "$1" >&2
+    exit 1
+}
+
+info() {
+    printf '\033[36m→\033[0m %s\n' "$1"
+}
+
+success() {
+    printf '\033[32m✓\033[0m %s\n' "$1"
+}
+
+warn() {
+    printf '\033[33m!\033[0m %s\n' "$1"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+find_project_root() {
+    local current="$PWD"
+
+    while [[ "$current" != "/" ]]; do
+        if [[ -f "$current/gradlew" ]] &&
+           { [[ -f "$current/settings.gradle.kts" ]] ||
+             [[ -f "$current/settings.gradle" ]]; }; then
+            printf '%s\n' "$current"
+            return 0
+        fi
+
+        current="$(dirname "$current")"
+    done
+
+    return 1
+}
+
+find_apk() {
+    local project_root="$1"
+    local build_type="$2"
+    local apk=""
+
+    apk="$(
+        find "$project_root" \
+            -type f \
+            -path "*/build/outputs/apk/$build_type/*.apk" \
+            ! -name '*androidTest*.apk' \
+            ! -name '*unaligned*.apk' \
+            -printf '%T@ %p\n' 2>/dev/null |
+            sort -nr |
+            head -n 1 |
+            cut -d' ' -f2-
+    )"
+
+    if [[ -n "$apk" && -f "$apk" ]]; then
+        printf '%s\n' "$apk"
+        return 0
+    fi
+
+    return 1
+}
+
+get_application_id() {
+    local project_root="$1"
+    local gradle_file=""
+    local application_id=""
+
+    while IFS= read -r gradle_file; do
+        application_id="$(
+            sed -nE \
+                's/^[[:space:]]*applicationId[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' \
+                "$gradle_file" |
+                head -n 1
+        )"
+
+        if [[ -n "$application_id" ]]; then
+            printf '%s\n' "$application_id"
+            return 0
+        fi
+    done < <(
+        find "$project_root" \
+            -maxdepth 3 \
+            \( -name 'build.gradle.kts' -o -name 'build.gradle' \) \
+            -type f
+    )
+
+    return 1
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --build-only)
+            INSTALL_MODE="none"
+            ;;
+
+        --install)
+            INSTALL_MODE="adb"
+            ;;
+
+        --open)
+            INSTALL_MODE="open"
+            ;;
+
+        --clean)
+            CLEAN_FIRST=true
+            ;;
+
+        --release)
+            BUILD_TYPE="release"
+            ;;
+
+        --no-cache)
+            GRADLE_EXTRA_ARGS+=(--no-build-cache)
+            ;;
+
+        --rerun)
+            GRADLE_EXTRA_ARGS+=(--rerun-tasks)
+            ;;
+
+        -h|--help)
+            usage
+            exit 0
+            ;;
+
+        *)
+            die "未知参数：$1"
+            ;;
+    esac
+
+    shift
+done
+
+PROJECT_ROOT="$(find_project_root)" ||
+    die "当前目录不在有效的 Gradle Android 项目中"
+
+GRADLEW="$PROJECT_ROOT/gradlew"
+
+[[ -f "$GRADLEW" ]] ||
+    die "未找到 Gradle Wrapper：$GRADLEW"
+
+chmod +x "$GRADLEW"
+
+if [[ "$BUILD_TYPE" == "debug" ]]; then
+    BUILD_TASK="assembleDebug"
+else
+    BUILD_TASK="assembleRelease"
+fi
+
+printf '\n'
+printf '\033[1mTADK Run\033[0m\n'
+printf '========================================\n'
+printf '项目：%s\n' "$PROJECT_ROOT"
+printf '任务：%s\n' "$BUILD_TASK"
+printf '模式：%s\n' "$INSTALL_MODE"
+printf '========================================\n\n'
+
+cd "$PROJECT_ROOT"
+
+if [[ "$CLEAN_FIRST" == true ]]; then
+    info "清理项目"
+
+    "$GRADLEW" clean \
+        --console=plain \
+        "${GRADLE_EXTRA_ARGS[@]}"
+fi
+
+info "开始构建 $BUILD_TYPE APK"
+
+BUILD_START="$(date +%s)"
+
+"$GRADLEW" "$BUILD_TASK" \
+    --console=plain \
+    "${GRADLE_EXTRA_ARGS[@]}"
+
+BUILD_END="$(date +%s)"
+BUILD_DURATION=$((BUILD_END - BUILD_START))
+
+APK_PATH="$(find_apk "$PROJECT_ROOT" "$BUILD_TYPE")" ||
+    die "构建完成，但未找到 $BUILD_TYPE APK"
+
+APK_SIZE="$(
+    du -h "$APK_PATH" 2>/dev/null |
+        awk '{print $1}'
+)"
+
+printf '\n'
+success "构建成功，用时 ${BUILD_DURATION}s"
+success "APK：$APK_PATH"
+success "大小：${APK_SIZE:-未知}"
+
+case "$INSTALL_MODE" in
+    none)
+        printf '\n仅构建模式，未执行安装。\n'
+        ;;
+
+    open)
+        if command_exists termux-open; then
+            info "打开系统安装界面"
+            termux-open "$APK_PATH"
+        else
+            warn "未找到 termux-open"
+            printf 'APK 已生成：%s\n' "$APK_PATH"
+            printf '可安装 termux-api，或手动打开该 APK。\n'
+        fi
+        ;;
+
+    adb)
+        command_exists adb ||
+            die "未找到 adb，请执行：pkg install android-tools"
+
+        ADB_STATE="$(
+            adb get-state 2>/dev/null || true
+        )"
+
+        if [[ "$ADB_STATE" != "device" ]]; then
+            printf '\n当前 ADB 设备状态：%s\n' "${ADB_STATE:-未连接}"
+            printf '请先连接设备，例如无线调试：\n'
+            printf '  adb pair IP:配对端口\n'
+            printf '  adb connect IP:调试端口\n'
+            exit 1
+        fi
+
+        info "通过 ADB 安装 APK"
+
+        adb install -r "$APK_PATH"
+
+        success "ADB 安装成功"
+
+        APPLICATION_ID="$(get_application_id "$PROJECT_ROOT" || true)"
+
+        if [[ -n "$APPLICATION_ID" ]]; then
+            info "尝试启动 $APPLICATION_ID"
+
+            if adb shell monkey \
+                -p "$APPLICATION_ID" \
+                -c android.intent.category.LAUNCHER \
+                1 >/dev/null 2>&1; then
+                success "应用已启动"
+            else
+                warn "APK 已安装，但自动启动失败"
+            fi
+        else
+            warn "无法自动识别 applicationId，已跳过启动"
+        fi
+        ;;
+
+    *)
+        die "未知安装模式：$INSTALL_MODE"
+        ;;
+esac
+
+printf '\n完成。\n'
