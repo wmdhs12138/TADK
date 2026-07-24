@@ -5,81 +5,77 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
-VERSION_FILE="$TADK_ROOT/VERSION"
+source "$TADK_ROOT/lib/common.sh"
+source "$TADK_ROOT/lib/command.sh"
 
-if [[ -f "$VERSION_FILE" ]]; then
-    TADK_VERSION="$(<"$VERSION_FILE")"
-else
-    TADK_VERSION="unknown"
-fi
+tadk_version() {
+    local version_file="$TADK_ROOT/VERSION"
 
-show_help() {
-    cat <<EOF_HELP
-Termux Android DevKit
-
-用法：
-  tadk <命令> [参数]
-
-命令：
-  newapp      创建 Compose Android 项目
-  doctor      检查 Android 开发环境
-  run         构建并运行当前 Android 项目
-  clean       安全清理 Android 项目构建缓存
-  info        显示当前 Android 项目信息
-  test        运行 TADK 冒烟测试
-  version     显示 TADK 版本
-  help        显示帮助
-
-示例：
-  tadk newapp MyApp com.example.myapp
-  tadk version
-EOF_HELP
+    if [[ -f "$version_file" ]]; then
+        tr -d '\r\n' < "$version_file"
+    else
+        printf 'unknown'
+    fi
 }
 
-if [[ $# -eq 0 ]]; then
-    show_help
-    exit 0
+usage() {
+    printf '\n%sTADK — Termux Android DevKit%s\n' \
+        "$TADK_COLOR_BOLD" \
+        "$TADK_COLOR_RESET"
+
+    printf '版本：%s\n\n' "$(tadk_version)"
+
+    printf '用法：\n'
+    printf '  tadk <command> [options]\n\n'
+
+    printf '命令：\n'
+
+    if ! tadk_command_list "$TADK_ROOT"; then
+        printf '  无法读取命令注册表\n'
+    fi
+
+    printf '\n其他：\n'
+    printf '  %-12s %s\n' "help" "显示帮助"
+    printf '  %-12s %s\n' "version" "显示 TADK 版本"
+
+    printf '\n'
+}
+
+COMMAND="${1:-help}"
+
+if [[ $# -gt 0 ]]; then
+    shift
 fi
 
-COMMAND="$1"
-shift
-
 case "$COMMAND" in
-    newapp)
-        exec "$SCRIPT_DIR/newapp" "$@"
+    help|-h|--help)
+        usage
+        exit 0
         ;;
 
-    doctor)
-        exec "$SCRIPT_DIR/doctor" "$@"
-        ;;
-
-    run)
-        exec "$SCRIPT_DIR/run" "$@"
-        ;;
-
-    clean)
-        exec "$SCRIPT_DIR/clean" "$@"
-        ;;
-
-    info)
-        exec "$SCRIPT_DIR/info" "$@"
-        ;;
-
-    test)
-        exec "$TADK_ROOT/tests/smoke.sh" "$@"
-        ;;
-
-    version|--version|-v)
-        printf 'TADK %s\n' "$TADK_VERSION"
-        ;;
-
-    help|--help|-h)
-        show_help
-        ;;
-
-    *)
-        printf '错误：未知命令：%s\n\n' "$COMMAND" >&2
-        show_help >&2
-        exit 1
+    version|-v|--version)
+        printf 'TADK %s\n' "$(tadk_version)"
+        exit 0
         ;;
 esac
+
+if ! tadk_command_is_valid_name "$COMMAND"; then
+    tadk_die "无效命令名：$COMMAND"
+fi
+
+COMMAND_TARGET="$(
+    tadk_command_target "$TADK_ROOT" "$COMMAND" || true
+)"
+
+if [[ -z "$COMMAND_TARGET" ]]; then
+    tadk_error "未知命令：$COMMAND"
+    printf '\n'
+    usage
+    exit 2
+fi
+
+if [[ ! -x "$COMMAND_TARGET" ]]; then
+    tadk_die "命令不可执行：${COMMAND_TARGET#"$TADK_ROOT"/}"
+fi
+
+exec "$COMMAND_TARGET" "$@"

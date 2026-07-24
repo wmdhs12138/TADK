@@ -44,7 +44,10 @@ while IFS= read -r file; do
         fail "$relative"
     fi
 done < <(
-    find "$TADK_ROOT/bin" "$TADK_ROOT/lib" \
+    find \
+        "$TADK_ROOT/bin" \
+        "$TADK_ROOT/lib" \
+        "$TADK_ROOT/commands" \
         -maxdepth 2 \
         -type f \
         2>/dev/null |
@@ -53,6 +56,19 @@ done < <(
 
 printf '\n\033[1mCLI commands\033[0m\n'
 printf '%s\n' '----------------------------------------'
+
+run_test "command manifest" \
+    bash -c "
+        source '$TADK_ROOT/lib/common.sh'
+        source '$TADK_ROOT/lib/command.sh'
+        tadk_command_validate_manifest '$TADK_ROOT'
+    "
+
+run_test "tadk info --help" \
+    "$TADK_ROOT/bin/tadk" info --help
+
+run_test "compat bin/info --help" \
+    "$TADK_ROOT/bin/info" --help
 
 run_test "tadk --help" \
     "$TADK_ROOT/bin/tadk" --help

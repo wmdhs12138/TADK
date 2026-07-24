@@ -1,0 +1,6 @@
+newapp|创建新的 Android Compose 项目|bin/newapp
+doctor|检查 Termux Android 开发环境|bin/doctor
+run|构建并运行当前 Android 项目|bin/run
+clean|清理当前项目构建缓存|bin/clean
+info|显示当前 Android 项目信息|commands/info.sh
+test|运行 TADK 冒烟测试|tests/smoke.sh
