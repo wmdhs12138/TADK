@@ -26,6 +26,7 @@ Termux Android DevKit
   run         构建并运行当前 Android 项目
   clean       安全清理 Android 项目构建缓存
   info        显示当前 Android 项目信息
+  test        运行 TADK 冒烟测试
   version     显示 TADK 版本
   help        显示帮助
 
@@ -62,6 +63,10 @@ case "$COMMAND" in
 
     info)
         exec "$SCRIPT_DIR/info" "$@"
+        ;;
+
+    test)
+        exec "$TADK_ROOT/tests/smoke.sh" "$@"
         ;;
 
     version|--version|-v)
