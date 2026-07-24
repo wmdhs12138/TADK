@@ -1,23 +1,45 @@
 # Verification
 
-Run from the TADK repository root:
+Run all commands from the TADK repository root.
 
-```bash
-bin/tadk --version
-bash tests/unit/run.sh
-bash tests/integration/run.sh
-bash tests/smoke.sh
-```
+## Version
 
-Expected version:
+    bin/tadk --version
 
-```text
-TADK 0.3.0-alpha.13-sprint.2
-```
+Expected:
 
-Expected test totals:
+    TADK 0.3.0-alpha.15
 
-- Workflow tests: 8 passed, 0 failed
-- Unit test files: 1 passed, 0 failed
-- Integration tests: 6 passed, 0 failed
-- Smoke checks: 74 passed, 0 failed
+## Static checks
+
+    find bin commands lib tests \
+        -type f -name '*.sh' \
+        -exec bash -n {} +
+
+    git diff --check
+
+## Test suite
+
+Run the complete suite:
+
+    bin/tadk test
+
+Run individual groups when diagnosing a failure:
+
+    bin/tadk test unit
+    bin/tadk test smoke
+    bin/tadk test integration
+
+All groups must finish with zero failed tests.
+
+Exact test totals are intentionally not recorded here because they
+change whenever coverage is expanded.
+
+## Release consistency
+
+The unit suite verifies that:
+
+- `VERSION` contains a valid TADK version;
+- `bin/tadk --version` matches `VERSION`;
+- README, release notes, changelog and verification documentation
+  reference the current version.
