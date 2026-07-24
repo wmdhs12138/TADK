@@ -271,17 +271,21 @@ dev_step_install() {
     "$TADK_BIN" install "${INSTALL_ARGS[@]}"
 }
 
-dev_step_clear_logcat() {
+dev_should_clear_logcat() {
     if [[ "$CLEAR_LOGCAT" == true ]]; then
-        printf '\n'
-        tadk_heading "步骤 3/5：清空旧日志"
-        printf '\n'
-        "$TADK_BIN" logcat --clear-only
-        return
+        return 0
     fi
 
     printf '\n'
     tadk_info "步骤 3/5：跳过清空日志"
+    return 1
+}
+
+dev_step_clear_logcat() {
+    printf '\n'
+    tadk_heading "步骤 3/5：清空旧日志"
+    printf '\n'
+    "$TADK_BIN" logcat --clear-only
 }
 
 dev_step_launch() {
@@ -291,15 +295,19 @@ dev_step_launch() {
     "$TADK_BIN" launch "${LAUNCH_ARGS[@]}"
 }
 
-dev_step_logcat() {
-    if [[ "$FOLLOW_LOGCAT" == false ]]; then
-        printf '\n'
-        tadk_info "步骤 5/5：跳过日志监听"
-        printf '\n'
-        tadk_success "开发流程完成"
-        return
+dev_should_follow_logcat() {
+    if [[ "$FOLLOW_LOGCAT" == true ]]; then
+        return 0
     fi
 
+    printf '\n'
+    tadk_info "步骤 5/5：跳过日志监听"
+    printf '\n'
+    tadk_success "开发流程完成"
+    return 1
+}
+
+dev_step_logcat() {
     printf '\n'
     tadk_heading "步骤 5/5：应用日志"
     printf '\n'
@@ -309,9 +317,15 @@ dev_step_logcat() {
 
 workflow_register build dev_step_build
 workflow_register install dev_step_install
-workflow_register clear-logcat dev_step_clear_logcat
+workflow_register_if \
+    clear-logcat \
+    dev_should_clear_logcat \
+    dev_step_clear_logcat
 workflow_register launch dev_step_launch
-workflow_register logcat dev_step_logcat
+workflow_register_if \
+    logcat \
+    dev_should_follow_logcat \
+    dev_step_logcat
 
 tadk_heading "TADK Dev"
 tadk_separator

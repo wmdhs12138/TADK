@@ -409,6 +409,213 @@ case_hook_argument_validation() {
     assert_contains "$after_output" 'usage: workflow_after STEP FUNCTION'
 }
 
+case_conditional_step_runs_when_condition_passes() {
+    source "$TADK_ROOT/lib/workflow.sh"
+
+    local trace_file
+    trace_file="$(mktemp)"
+    trap 'rm -f "$trace_file"' RETURN
+
+    condition_passes() {
+        printf 'condition\n' >> "$trace_file"
+        return 0
+    }
+
+    before_hook() {
+        printf 'before\n' >> "$trace_file"
+    }
+
+    sample_step() {
+        printf 'step\n' >> "$trace_file"
+    }
+
+    after_hook() {
+        printf 'after\n' >> "$trace_file"
+    }
+
+    workflow_register_if sample condition_passes sample_step
+    workflow_before sample before_hook
+    workflow_after sample after_hook
+
+    workflow_step sample
+
+    local trace
+    trace="$(cat "$trace_file")"
+
+    assert_equals \
+        $'condition\nbefore\nstep\nafter' \
+        "$trace" \
+        '条件满足时应执行 before hook、主体和 after hook'
+}
+
+case_conditional_step_skips_when_condition_fails() {
+    source "$TADK_ROOT/lib/workflow.sh"
+
+    local trace_file
+    trace_file="$(mktemp)"
+    trap 'rm -f "$trace_file"' RETURN
+
+    condition_fails() {
+        printf 'condition\n' >> "$trace_file"
+        return 1
+    }
+
+    never_before() {
+        printf 'before-never\n' >> "$trace_file"
+    }
+
+    never_step() {
+        printf 'step-never\n' >> "$trace_file"
+    }
+
+    never_after() {
+        printf 'after-never\n' >> "$trace_file"
+    }
+
+    following_step() {
+        printf 'following\n' >> "$trace_file"
+    }
+
+    workflow_register_if conditional condition_fails never_step
+    workflow_before conditional never_before
+    workflow_after conditional never_after
+    workflow_register following following_step
+
+    workflow_run conditional following
+
+    local trace
+    trace="$(cat "$trace_file")"
+
+    assert_equals \
+        $'condition\nfollowing' \
+        "$trace" \
+        '条件不满足时应跳过整个步骤并继续执行后续步骤'
+}
+
+case_conditional_registration_validates_functions() {
+    source "$TADK_ROOT/lib/workflow.sh"
+
+    sample_condition() { :; }
+    sample_step() { :; }
+
+    local condition_output step_output
+    local condition_status=0
+    local step_status=0
+
+    condition_output="$(
+        workflow_register_if sample missing_condition sample_step 2>&1
+    )" || condition_status=$?
+
+    step_output="$(
+        workflow_register_if sample sample_condition missing_step 2>&1
+    )" || step_status=$?
+
+    assert_equals '127' "$condition_status" \
+        '缺失条件函数应返回 127'
+
+    assert_equals '127' "$step_status" \
+        '缺失步骤函数应返回 127'
+
+    assert_contains \
+        "$condition_output" \
+        'function not found: missing_condition'
+
+    assert_contains \
+        "$step_output" \
+        'function not found: missing_step'
+}
+
+case_conditional_registration_rejects_duplicate_step() {
+    source "$TADK_ROOT/lib/workflow.sh"
+
+    sample_condition() { :; }
+    sample_step() { :; }
+
+    workflow_register sample sample_step
+
+    local output status=0
+    output="$(
+        workflow_register_if sample sample_condition sample_step 2>&1
+    )" || status=$?
+
+    assert_equals '65' "$status" \
+        '条件步骤重复注册应返回 65'
+
+    assert_contains "$output" \
+        'step already registered: sample'
+}
+
+case_conditional_registration_argument_validation() {
+    source "$TADK_ROOT/lib/workflow.sh"
+
+    local output status=0
+    output="$(workflow_register_if sample condition 2>&1)" || status=$?
+
+    assert_equals '64' "$status" \
+        '条件步骤参数错误应返回 64'
+
+    assert_contains \
+        "$output" \
+        'usage: workflow_register_if STEP CONDITION_FUNCTION FUNCTION'
+}
+
+case_unavailable_condition_function_fails_at_runtime() {
+    source "$TADK_ROOT/lib/workflow.sh"
+
+    sample_condition() { :; }
+    sample_step() { :; }
+
+    workflow_register_if sample sample_condition sample_step
+    unset -f sample_condition
+
+    local output status=0
+    output="$(workflow_step sample 2>&1)" || status=$?
+
+    assert_equals '127' "$status" \
+        '运行时缺失条件函数应返回 127'
+
+    assert_contains \
+        "$output" \
+        'registered function is unavailable: sample_condition'
+}
+
+case_conditional_skip_is_safe_with_errexit() {
+    source "$TADK_ROOT/lib/workflow.sh"
+
+    local trace_file
+    trace_file="$(mktemp)"
+    trap 'rm -f "$trace_file"' RETURN
+
+    condition_fails() {
+        printf 'condition\n' >> "$trace_file"
+        return 1
+    }
+
+    never_step() {
+        printf 'never\n' >> "$trace_file"
+    }
+
+    following_step() {
+        printf 'following\n' >> "$trace_file"
+    }
+
+    workflow_register_if conditional condition_fails never_step
+    workflow_register following following_step
+
+    (
+        set -e
+        workflow_run conditional following
+    )
+
+    local trace
+    trace="$(cat "$trace_file")"
+
+    assert_equals \
+        $'condition\nfollowing' \
+        "$trace" \
+        'set -e 下条件不满足也应安全跳过并继续 workflow'
+}
+
 run_case 'register and query step' \
     case_register_and_query
 
@@ -456,6 +663,27 @@ run_case 'hook requires existing function' \
 
 run_case 'hook argument validation' \
     case_hook_argument_validation
+
+run_case 'conditional step executes' \
+    case_conditional_step_runs_when_condition_passes
+
+run_case 'conditional step skips' \
+    case_conditional_step_skips_when_condition_fails
+
+run_case 'conditional registration validates functions' \
+    case_conditional_registration_validates_functions
+
+run_case 'conditional registration rejects duplicate' \
+    case_conditional_registration_rejects_duplicate_step
+
+run_case 'conditional registration argument validation' \
+    case_conditional_registration_argument_validation
+
+run_case 'unavailable condition function' \
+    case_unavailable_condition_function_fails_at_runtime
+
+run_case 'conditional skip with errexit' \
+    case_conditional_skip_is_safe_with_errexit
 
 printf \
     '%s\nPassed: %d\nFailed: %d\n' \
