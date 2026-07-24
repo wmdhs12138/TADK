@@ -1,17 +1,17 @@
 # Changelog
 
-## 0.3.0-alpha.12 — 2026-07-24
+## 0.3.0-alpha.13-sprint.1
 
 ### Added
-- Integration coverage for `build`, `logcat`, and `dev`.
-- Assertions for ordering and absent files.
-- Mock controls for Gradle failures and Android application state.
+
+- Minimal business-agnostic Workflow Engine in `lib/workflow.sh`.
+- Unit test runner and Workflow Engine unit tests.
+- Workflow architecture documentation.
 
 ### Changed
-- Integration runner now executes six command suites.
-- Mock environment restores `PATH` during cleanup.
-- Mock installation records the fixture package for end-to-end `dev` testing.
 
-### Fixed
-- Deterministic cleanup of temporary test environments.
-- Failure-path validation preventing later workflow steps after a build error.
+- Smoke verification now runs unit tests before integration tests.
+
+### Compatibility
+
+- No existing command implementation or user-facing CLI behavior changed.

@@ -1,11 +1,17 @@
 # Verification
 
-From the TADK repository root:
+Run from the TADK repository root:
 
 ```bash
+bash -n lib/workflow.sh
+bash -n tests/unit/workflow.sh
+bash -n tests/unit/run.sh
+bash tests/unit/run.sh
 bash tests/smoke.sh
-bin/tadk --version
-git status --short
 ```
 
-Expected version: `0.3.0-alpha.12`. All smoke and integration tests should pass.
+Expected result:
+
+- 8 Workflow Engine cases pass.
+- Unit test runner passes.
+- Existing smoke and integration suites continue to pass.
