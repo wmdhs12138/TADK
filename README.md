@@ -79,3 +79,15 @@ tadk clean --deep
 ```
 
 TADK does not remove the global Gradle dependency cache under ~/.gradle/caches.
+
+## Internal architecture
+
+TADK commands share reusable shell libraries:
+
+```text
+lib/common.sh   Common output, command and size helpers
+lib/project.sh  Android Gradle project discovery
+lib/apk.sh      APK artifact discovery
+```
+
+Commands should reuse these libraries instead of implementing duplicate project detection and output helpers.
