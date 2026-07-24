@@ -51,3 +51,31 @@ tadk run --release --build-only
 ```
 
 By default, TADK builds a Debug APK and opens the Android package installer using termux-open.
+
+## Clean project build files
+
+Remove build outputs from the current Android project:
+
+```bash
+tadk clean
+```
+
+### Inspect project cache usage without deleting anything:
+
+```bash
+tadk clean --status
+```
+
+### Preview a cleanup:
+
+```bash
+tadk clean --dry-run
+```
+
+### Remove build outputs and the project-local Gradle cache:
+
+```bash
+tadk clean --deep
+```
+
+TADK does not remove the global Gradle dependency cache under ~/.gradle/caches.

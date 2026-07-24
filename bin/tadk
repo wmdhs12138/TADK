@@ -24,6 +24,7 @@ Termux Android DevKit
   newapp      创建 Compose Android 项目
   doctor      检查 Android 开发环境
   run         构建并运行当前 Android 项目
+  clean       安全清理 Android 项目构建缓存
   version     显示 TADK 版本
   help        显示帮助
 
@@ -49,8 +50,13 @@ case "$COMMAND" in
     doctor)
         exec "$SCRIPT_DIR/doctor" "$@"
         ;;
+
     run)
         exec "$SCRIPT_DIR/run" "$@"
+        ;;
+
+    clean)
+        exec "$SCRIPT_DIR/clean" "$@"
         ;;
 
     version|--version|-v)
