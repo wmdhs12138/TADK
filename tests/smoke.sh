@@ -103,6 +103,15 @@ run_test "clean implementation exists" \
 run_test "doctor implementation exists" \
     test -x "$TADK_ROOT/commands/doctor.sh"
 
+run_test "tadk build --help" \
+    "$TADK_ROOT/bin/tadk" build --help
+
+run_test "compat bin/build --help" \
+    "$TADK_ROOT/bin/build" --help
+
+run_test "build implementation exists" \
+    test -x "$TADK_ROOT/commands/build.sh"
+
 printf '\n%s\n' '========================================'
 printf '通过：%d\n' "$PASS_COUNT"
 printf '失败：%d\n' "$FAIL_COUNT"
