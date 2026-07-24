@@ -200,3 +200,7 @@ if (( FAIL_COUNT > 0 )); then
 fi
 
 printf '\n\033[32m全部冒烟测试通过。\033[0m\n'
+
+printf '\n'
+printf 'Running integration tests...\n'
+"$TADK_ROOT/tests/integration/run.sh"
