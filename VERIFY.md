@@ -3,15 +3,21 @@
 Run from the TADK repository root:
 
 ```bash
-bash -n lib/workflow.sh
-bash -n tests/unit/workflow.sh
-bash -n tests/unit/run.sh
+bin/tadk --version
 bash tests/unit/run.sh
+bash tests/integration/run.sh
 bash tests/smoke.sh
 ```
 
-Expected result:
+Expected version:
 
-- 8 Workflow Engine cases pass.
-- Unit test runner passes.
-- Existing smoke and integration suites continue to pass.
+```text
+TADK 0.3.0-alpha.13-sprint.2
+```
+
+Expected test totals:
+
+- Workflow tests: 8 passed, 0 failed
+- Unit test files: 1 passed, 0 failed
+- Integration tests: 6 passed, 0 failed
+- Smoke checks: 74 passed, 0 failed

@@ -8,6 +8,7 @@ TADK_BIN="$TADK_ROOT/bin/tadk"
 
 source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/logcat.sh"
+source "$TADK_ROOT/lib/workflow.sh"
 
 BUILD_TYPE="debug"
 CLEAN_FIRST=false
@@ -86,17 +87,6 @@ require_option_value() {
 
     [[ -n "$value" ]] ||
         tadk_die "$option_name 缺少参数"
-}
-
-run_step() {
-    local title="$1"
-    shift
-
-    printf '\n'
-    tadk_heading "$title"
-    printf '\n'
-
-    "$@"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -267,6 +257,62 @@ if (( ${#LOGCAT_EXTRA_ARGS[@]} > 0 )); then
     LOGCAT_ARGS+=(-- "${LOGCAT_EXTRA_ARGS[@]}")
 fi
 
+dev_step_build() {
+    printf '\n'
+    tadk_heading "步骤 1/5：构建 APK"
+    printf '\n'
+    "$TADK_BIN" build "${BUILD_ARGS[@]}"
+}
+
+dev_step_install() {
+    printf '\n'
+    tadk_heading "步骤 2/5：安装 APK"
+    printf '\n'
+    "$TADK_BIN" install "${INSTALL_ARGS[@]}"
+}
+
+dev_step_clear_logcat() {
+    if [[ "$CLEAR_LOGCAT" == true ]]; then
+        printf '\n'
+        tadk_heading "步骤 3/5：清空旧日志"
+        printf '\n'
+        "$TADK_BIN" logcat --clear-only
+        return
+    fi
+
+    printf '\n'
+    tadk_info "步骤 3/5：跳过清空日志"
+}
+
+dev_step_launch() {
+    printf '\n'
+    tadk_heading "步骤 4/5：启动应用"
+    printf '\n'
+    "$TADK_BIN" launch "${LAUNCH_ARGS[@]}"
+}
+
+dev_step_logcat() {
+    if [[ "$FOLLOW_LOGCAT" == false ]]; then
+        printf '\n'
+        tadk_info "步骤 5/5：跳过日志监听"
+        printf '\n'
+        tadk_success "开发流程完成"
+        return
+    fi
+
+    printf '\n'
+    tadk_heading "步骤 5/5：应用日志"
+    printf '\n'
+
+    exec "$TADK_BIN" logcat "${LOGCAT_ARGS[@]}"
+}
+
+workflow_register build dev_step_build
+workflow_register install dev_step_install
+workflow_register clear-logcat dev_step_clear_logcat
+workflow_register launch dev_step_launch
+workflow_register logcat dev_step_logcat
+
 tadk_heading "TADK Dev"
 tadk_separator
 printf '构建类型：%s\n' "$BUILD_TYPE"
@@ -286,37 +332,4 @@ fi
 
 tadk_separator
 
-run_step \
-    "步骤 1/5：构建 APK" \
-    "$TADK_BIN" build "${BUILD_ARGS[@]}"
-
-run_step \
-    "步骤 2/5：安装 APK" \
-    "$TADK_BIN" install "${INSTALL_ARGS[@]}"
-
-if [[ "$CLEAR_LOGCAT" == true ]]; then
-    run_step \
-        "步骤 3/5：清空旧日志" \
-        "$TADK_BIN" logcat --clear-only
-else
-    printf '\n'
-    tadk_info "步骤 3/5：跳过清空日志"
-fi
-
-run_step \
-    "步骤 4/5：启动应用" \
-    "$TADK_BIN" launch "${LAUNCH_ARGS[@]}"
-
-if [[ "$FOLLOW_LOGCAT" == false ]]; then
-    printf '\n'
-    tadk_info "步骤 5/5：跳过日志监听"
-    printf '\n'
-    tadk_success "开发流程完成"
-    exit 0
-fi
-
-printf '\n'
-tadk_heading "步骤 5/5：应用日志"
-printf '\n'
-
-exec "$TADK_BIN" logcat "${LOGCAT_ARGS[@]}"
+workflow_run build install clear-logcat launch logcat
