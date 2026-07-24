@@ -4,6 +4,7 @@ set -Eeuo pipefail
 TADK_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEST_FILES=(
     "$TADK_ROOT/tests/unit/workflow.sh"
+    "$TADK_ROOT/tests/unit/test.sh"
 )
 
 PASSED=0
