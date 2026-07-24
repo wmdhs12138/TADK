@@ -103,7 +103,8 @@ tadk_build_execute() {
         tadk_build_run_clean \
             "$project_root" \
             "$gradlew" \
-            "$@" >&2
+            "$@" >&2 ||
+            return $?
     fi
 
     tadk_info "开始构建 $build_type APK" >&2
@@ -114,7 +115,8 @@ tadk_build_execute() {
         "$project_root" \
         "$gradlew" \
         "$build_task" \
-        "$@" >&2
+        "$@" >&2 ||
+        return $?
 
     end_time="$(date +%s)"
 
