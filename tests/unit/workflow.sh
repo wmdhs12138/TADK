@@ -641,14 +641,15 @@ case_before_failure_is_explicit_with_errexit() {
     bash -c '
         set -e
         source "$1/lib/workflow.sh"
+        trace_file="$2"
 
         failing_before() {
-            printf "before-failing\n" >> "$2"
+            printf "before-failing\n" >> "$trace_file"
             return 41
         }
 
         never_step() {
-            printf "step-never\n" >> "$2"
+            printf "step-never\n" >> "$trace_file"
         }
 
         workflow_register sample never_step
@@ -692,14 +693,15 @@ case_step_failure_is_explicit_with_errexit() {
     bash -c '
         set -e
         source "$1/lib/workflow.sh"
+        trace_file="$2"
 
         failing_step() {
-            printf "step-failing\n" >> "$2"
+            printf "step-failing\n" >> "$trace_file"
             return 42
         }
 
         never_after() {
-            printf "after-never\n" >> "$2"
+            printf "after-never\n" >> "$trace_file"
         }
 
         workflow_register sample failing_step
@@ -748,18 +750,19 @@ case_after_failure_is_explicit_with_errexit() {
     bash -c '
         set -e
         source "$1/lib/workflow.sh"
+        trace_file="$2"
 
         sample_step() {
-            printf "step\n" >> "$2"
+            printf "step\n" >> "$trace_file"
         }
 
         failing_after() {
-            printf "after-failing\n" >> "$2"
+            printf "after-failing\n" >> "$trace_file"
             return 43
         }
 
         never_after() {
-            printf "after-never\n" >> "$2"
+            printf "after-never\n" >> "$trace_file"
         }
 
         workflow_register sample sample_step
@@ -809,18 +812,19 @@ case_workflow_failure_is_explicit_with_errexit() {
     bash -c '
         set -e
         source "$1/lib/workflow.sh"
+        trace_file="$2"
 
         first_step() {
-            printf "first\n" >> "$2"
+            printf "first\n" >> "$trace_file"
         }
 
         failing_step() {
-            printf "failing\n" >> "$2"
+            printf "failing\n" >> "$trace_file"
             return 44
         }
 
         never_step() {
-            printf "never\n" >> "$2"
+            printf "never\n" >> "$trace_file"
         }
 
         workflow_register first first_step
