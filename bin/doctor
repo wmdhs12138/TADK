@@ -2,6 +2,11 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+source "$TADK_ROOT/lib/common.sh"
+
 PASS_COUNT=0
 WARN_COUNT=0
 FAIL_COUNT=0
@@ -25,10 +30,6 @@ section() {
     printf '\n\033[1m%s\033[0m\n' "$1"
 }
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
 get_java_major() {
     java -version 2>&1 |
         sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' |
@@ -39,7 +40,7 @@ check_command() {
     local command_name="$1"
     local display_name="${2:-$1}"
 
-    if command_exists "$command_name"; then
+    if tadk_command_exists "$command_name"; then
         pass "$display_name" "$(command -v "$command_name")"
     else
         fail "$display_name" "未找到命令：$command_name"
@@ -87,7 +88,7 @@ check_command grep "grep"
 
 section "Java"
 
-if command_exists java; then
+if tadk_command_exists java; then
     JAVA_PATH="$(command -v java)"
     JAVA_MAJOR="$(get_java_major)"
 
@@ -124,7 +125,7 @@ else
     fail "ANDROID_HOME" "环境变量未设置"
 fi
 
-if command_exists sdkmanager; then
+if tadk_command_exists sdkmanager; then
     SDKMANAGER_PATH="$(command -v sdkmanager)"
     pass "sdkmanager" "$SDKMANAGER_PATH"
 else
@@ -163,7 +164,7 @@ fi
 
 section "Termux Android 工具"
 
-if command_exists aapt2; then
+if tadk_command_exists aapt2; then
     AAPT2_PATH="$(command -v aapt2)"
     AAPT2_ARCH="$(file "$AAPT2_PATH" 2>/dev/null || true)"
 
