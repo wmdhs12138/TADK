@@ -6,6 +6,9 @@ TADK_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=../helpers/assertions.sh
 source "$TADK_ROOT/tests/helpers/assertions.sh"
 
+# shellcheck source=../helpers/process.sh
+source "$TADK_ROOT/tests/helpers/process.sh"
+
 PASSED=0
 FAILED=0
 
@@ -617,49 +620,31 @@ case_conditional_skip_is_safe_with_errexit() {
 }
 
 case_before_failure_is_explicit_with_errexit() {
-    source "$TADK_ROOT/lib/workflow.sh"
-
     local trace_file
     trace_file="$(mktemp)"
     trap 'rm -f "$trace_file"' RETURN
 
-    failing_before() {
-        printf 'before-failing\n' >> "$trace_file"
-        return 41
-    }
-
-    never_step() {
-        printf 'step-never\n' >> "$trace_file"
-    }
-
-    workflow_register sample never_step
-    workflow_before sample failing_before
-
-    local status=0
-
-    set +e
-    bash -c '
-        set -e
+    run_bash_errexit '
         source "$1/lib/workflow.sh"
         trace_file="$2"
 
         failing_before() {
-            printf "before-failing\n" >> "$trace_file"
+            printf "before-failing\\n" >> "$trace_file"
             return 41
         }
 
         never_step() {
-            printf "step-never\n" >> "$trace_file"
+            printf "step-never\\n" >> "$trace_file"
         }
 
         workflow_register sample never_step
         workflow_before sample failing_before
         workflow_step sample
-    ' bash "$TADK_ROOT" "$trace_file"
-    status=$?
-    set -e
+    ' "$TADK_ROOT" "$trace_file"
 
-    assert_equals '41' "$status" \
+    assert_equals \
+        '41' \
+        "$RUN_STATUS" \
         'set -e 下 before hook 失败码应保持不变'
 
     assert_equals \
@@ -669,49 +654,31 @@ case_before_failure_is_explicit_with_errexit() {
 }
 
 case_step_failure_is_explicit_with_errexit() {
-    source "$TADK_ROOT/lib/workflow.sh"
-
     local trace_file
     trace_file="$(mktemp)"
     trap 'rm -f "$trace_file"' RETURN
 
-    failing_step() {
-        printf 'step-failing\n' >> "$trace_file"
-        return 42
-    }
-
-    never_after() {
-        printf 'after-never\n' >> "$trace_file"
-    }
-
-    workflow_register sample failing_step
-    workflow_after sample never_after
-
-    local status=0
-
-    set +e
-    bash -c '
-        set -e
+    run_bash_errexit '
         source "$1/lib/workflow.sh"
         trace_file="$2"
 
         failing_step() {
-            printf "step-failing\n" >> "$trace_file"
+            printf "step-failing\\n" >> "$trace_file"
             return 42
         }
 
         never_after() {
-            printf "after-never\n" >> "$trace_file"
+            printf "after-never\\n" >> "$trace_file"
         }
 
         workflow_register sample failing_step
         workflow_after sample never_after
         workflow_step sample
-    ' bash "$TADK_ROOT" "$trace_file"
-    status=$?
-    set -e
+    ' "$TADK_ROOT" "$trace_file"
 
-    assert_equals '42' "$status" \
+    assert_equals \
+        '42' \
+        "$RUN_STATUS" \
         'set -e 下步骤主体失败码应保持不变'
 
     assert_equals \
@@ -721,59 +688,36 @@ case_step_failure_is_explicit_with_errexit() {
 }
 
 case_after_failure_is_explicit_with_errexit() {
-    source "$TADK_ROOT/lib/workflow.sh"
-
     local trace_file
     trace_file="$(mktemp)"
     trap 'rm -f "$trace_file"' RETURN
 
-    sample_step() {
-        printf 'step\n' >> "$trace_file"
-    }
-
-    failing_after() {
-        printf 'after-failing\n' >> "$trace_file"
-        return 43
-    }
-
-    never_after() {
-        printf 'after-never\n' >> "$trace_file"
-    }
-
-    workflow_register sample sample_step
-    workflow_after sample failing_after
-    workflow_after sample never_after
-
-    local status=0
-
-    set +e
-    bash -c '
-        set -e
+    run_bash_errexit '
         source "$1/lib/workflow.sh"
         trace_file="$2"
 
         sample_step() {
-            printf "step\n" >> "$trace_file"
+            printf "step\\n" >> "$trace_file"
         }
 
         failing_after() {
-            printf "after-failing\n" >> "$trace_file"
+            printf "after-failing\\n" >> "$trace_file"
             return 43
         }
 
         never_after() {
-            printf "after-never\n" >> "$trace_file"
+            printf "after-never\\n" >> "$trace_file"
         }
 
         workflow_register sample sample_step
         workflow_after sample failing_after
         workflow_after sample never_after
         workflow_step sample
-    ' bash "$TADK_ROOT" "$trace_file"
-    status=$?
-    set -e
+    ' "$TADK_ROOT" "$trace_file"
 
-    assert_equals '43' "$status" \
+    assert_equals \
+        '43' \
+        "$RUN_STATUS" \
         'set -e 下 after hook 失败码应保持不变'
 
     assert_equals \
@@ -783,59 +727,36 @@ case_after_failure_is_explicit_with_errexit() {
 }
 
 case_workflow_failure_is_explicit_with_errexit() {
-    source "$TADK_ROOT/lib/workflow.sh"
-
     local trace_file
     trace_file="$(mktemp)"
     trap 'rm -f "$trace_file"' RETURN
 
-    first_step() {
-        printf 'first\n' >> "$trace_file"
-    }
-
-    failing_step() {
-        printf 'failing\n' >> "$trace_file"
-        return 44
-    }
-
-    never_step() {
-        printf 'never\n' >> "$trace_file"
-    }
-
-    workflow_register first first_step
-    workflow_register failing failing_step
-    workflow_register never never_step
-
-    local status=0
-
-    set +e
-    bash -c '
-        set -e
+    run_bash_errexit '
         source "$1/lib/workflow.sh"
         trace_file="$2"
 
         first_step() {
-            printf "first\n" >> "$trace_file"
+            printf "first\\n" >> "$trace_file"
         }
 
         failing_step() {
-            printf "failing\n" >> "$trace_file"
+            printf "failing\\n" >> "$trace_file"
             return 44
         }
 
         never_step() {
-            printf "never\n" >> "$trace_file"
+            printf "never\\n" >> "$trace_file"
         }
 
         workflow_register first first_step
         workflow_register failing failing_step
         workflow_register never never_step
         workflow_run first failing never
-    ' bash "$TADK_ROOT" "$trace_file"
-    status=$?
-    set -e
+    ' "$TADK_ROOT" "$trace_file"
 
-    assert_equals '44' "$status" \
+    assert_equals \
+        '44' \
+        "$RUN_STATUS" \
         'set -e 下 workflow_run 应传播原始失败码'
 
     assert_equals \
