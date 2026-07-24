@@ -1,0 +1,26 @@
+# Gradle and Android build output
+.gradle/
+build/
+**/build/
+local.properties
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Temporary files
+*.log
+*.tmp
+*.swp
+*~
+
+# Signing and secrets
+*.jks
+*.keystore
+.env
+.env.*
+secrets.properties
+
+# Generated test projects
+tests/output/

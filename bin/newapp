@@ -1,0 +1,154 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+TEMPLATE_DIR="$TADK_ROOT/templates/compose-app"
+PROJECTS_DIR="${TADK_PROJECTS_DIR:-$HOME/projects}"
+
+usage() {
+    cat <<'HELP'
+用法：
+  newapp <项目名> <包名>
+
+示例：
+  newapp MyApp com.example.myapp
+  newapp BalanceApp com.fu.balanceapp
+
+规则：
+  项目名只能包含英文字母和数字，并且必须以字母开头。
+  包名必须使用小写字母、数字和点号。
+HELP
+}
+
+die() {
+    printf '错误：%s\n' "$1" >&2
+    exit 1
+}
+
+if [[ $# -ne 2 ]]; then
+    usage
+    exit 1
+fi
+
+APP_NAME="$1"
+PACKAGE_NAME="$2"
+DEST_DIR="$PROJECTS_DIR/$APP_NAME"
+
+# Kotlin 类名、函数名需要是合法标识符。
+if [[ ! "$APP_NAME" =~ ^[A-Za-z][A-Za-z0-9]*$ ]]; then
+    die "项目名无效：$APP_NAME"
+fi
+
+# Android 包名采用较严格的小写格式。
+if [[ ! "$PACKAGE_NAME" =~ ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ ]]; then
+    die "包名无效：$PACKAGE_NAME"
+fi
+
+[[ -d "$TEMPLATE_DIR" ]] ||
+    die "模板不存在：$TEMPLATE_DIR"
+
+[[ ! -e "$DEST_DIR" ]] ||
+    die "目标目录已经存在：$DEST_DIR"
+
+[[ -n "${ANDROID_HOME:-}" ]] ||
+    die "ANDROID_HOME 尚未设置"
+
+[[ -f "$ANDROID_HOME/platforms/android-36/android.jar" ]] ||
+    die "未找到 Android API 36：$ANDROID_HOME/platforms/android-36"
+
+mkdir -p "$PROJECTS_DIR"
+
+printf '创建项目：%s\n' "$APP_NAME"
+printf '应用包名：%s\n' "$PACKAGE_NAME"
+printf '目标目录：%s\n\n' "$DEST_DIR"
+
+cp -a "$TEMPLATE_DIR" "$DEST_DIR"
+
+# 防止模板意外残留本地状态。
+rm -rf \
+    "$DEST_DIR/.git" \
+    "$DEST_DIR/.gradle" \
+    "$DEST_DIR/build" \
+    "$DEST_DIR/app/build"
+
+rm -f "$DEST_DIR/local.properties"
+
+OLD_PACKAGE="com.example.templateapp"
+OLD_PACKAGE_PATH="com/example/templateapp"
+NEW_PACKAGE_PATH="${PACKAGE_NAME//./\/}"
+
+OLD_SOURCE_DIR="$DEST_DIR/app/src/main/java/$OLD_PACKAGE_PATH"
+NEW_SOURCE_DIR="$DEST_DIR/app/src/main/java/$NEW_PACKAGE_PATH"
+
+[[ -f "$OLD_SOURCE_DIR/MainActivity.kt" ]] ||
+    die "模板中的 MainActivity.kt 不存在"
+
+mkdir -p "$NEW_SOURCE_DIR"
+mv "$OLD_SOURCE_DIR/MainActivity.kt" "$NEW_SOURCE_DIR/MainActivity.kt"
+
+# 清理移动后留下的空目录。
+find "$DEST_DIR/app/src/main/java" \
+    -type d \
+    -empty \
+    -delete
+
+# 替换 Kotlin 包名和通用函数名。
+sed -i \
+    -e "s/package $OLD_PACKAGE/package $PACKAGE_NAME/g" \
+    -e "s/TemplateApp/$APP_NAME/g" \
+    "$NEW_SOURCE_DIR/MainActivity.kt"
+
+# 替换 namespace 和 applicationId。
+sed -i \
+    "s/$OLD_PACKAGE/$PACKAGE_NAME/g" \
+    "$DEST_DIR/app/build.gradle.kts"
+
+# 替换 Gradle 项目名。
+sed -i \
+    "s/rootProject.name = \"TemplateApp\"/rootProject.name = \"$APP_NAME\"/" \
+    "$DEST_DIR/settings.gradle.kts"
+
+# 替换桌面显示名称。
+sed -i \
+    "s#<string name=\"app_name\">Template App</string>#<string name=\"app_name\">$APP_NAME</string>#" \
+    "$DEST_DIR/app/src/main/res/values/strings.xml"
+
+# 写入当前设备的 SDK 路径。
+cat > "$DEST_DIR/local.properties" <<LOCAL_PROPERTIES
+sdk.dir=$ANDROID_HOME
+LOCAL_PROPERTIES
+
+chmod +x "$DEST_DIR/gradlew"
+
+cd "$DEST_DIR"
+
+git init -q
+git branch -M main
+git add .
+git commit -q -m "Initial $APP_NAME project"
+
+printf '\n正在执行首次构建……\n\n'
+
+if ./gradlew assembleDebug --console=plain; then
+    APK_PATH="$DEST_DIR/app/build/outputs/apk/debug/app-debug.apk"
+
+    printf '\n========================================\n'
+    printf '项目创建成功\n'
+    printf '目录：%s\n' "$DEST_DIR"
+    printf '包名：%s\n' "$PACKAGE_NAME"
+    printf 'APK： %s\n' "$APK_PATH"
+    printf '========================================\n\n'
+
+    printf '进入项目：\n'
+    printf '  cd %q\n\n' "$DEST_DIR"
+
+    printf '安装 APK：\n'
+    printf '  termux-open %q\n' "$APK_PATH"
+else
+    printf '\n项目文件已经创建，但首次构建失败。\n' >&2
+    printf '请进入目录检查：%s\n' "$DEST_DIR" >&2
+    exit 1
+fi
