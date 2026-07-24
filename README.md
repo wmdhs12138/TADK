@@ -21,7 +21,7 @@ tadk newapp MyApp com.example.myapp
 
 ## Project status
 
-Current development version: '0.2.0-dev'
+Current development version: '0.3.0-alpha.12'
 
 
 ## Environment diagnostics

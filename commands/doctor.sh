@@ -7,6 +7,30 @@ TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 source "$TADK_ROOT/lib/common.sh"
 
+usage() {
+    cat <<'HELP'
+用法：
+  tadk doctor
+
+说明：
+  检查 Termux、Java、Android SDK、Gradle、ADB 和 TADK 配置。
+
+选项：
+  -h, --help    显示帮助
+HELP
+}
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+esac
+
+if [[ $# -gt 0 ]]; then
+    tadk_die "未知参数：$1"
+fi
+
 PASS_COUNT=0
 WARN_COUNT=0
 FAIL_COUNT=0
