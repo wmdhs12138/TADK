@@ -23,3 +23,12 @@ tadk newapp MyApp com.example.myapp
 
 Current development version: '0.2.0-dev'
 
+
+## Environment diagnostics
+
+Check whether Java, Android SDK, ARM64 build tools and TADK are
+configured correctly:
+
+```bash
+tadk doctor
+```

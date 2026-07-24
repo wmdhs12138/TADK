@@ -22,6 +22,7 @@ Termux Android DevKit
 
 命令：
   newapp      创建 Compose Android 项目
+  doctor      检查 Android 开发环境
   version     显示 TADK 版本
   help        显示帮助
 
@@ -42,6 +43,10 @@ shift
 case "$COMMAND" in
     newapp)
         exec "$SCRIPT_DIR/newapp" "$@"
+        ;;
+
+    doctor)
+        exec "$SCRIPT_DIR/doctor" "$@"
         ;;
 
     version|--version|-v)
