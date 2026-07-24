@@ -1,0 +1,278 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+source "$TADK_ROOT/lib/common.sh"
+
+PASS_COUNT=0
+WARN_COUNT=0
+FAIL_COUNT=0
+
+pass() {
+    printf '\033[32m✓\033[0m %-28s %s\n' "$1" "${2:-}"
+    ((PASS_COUNT++))
+}
+
+warn() {
+    printf '\033[33m!\033[0m %-28s %s\n' "$1" "${2:-}"
+    ((WARN_COUNT++))
+}
+
+fail() {
+    printf '\033[31m✗\033[0m %-28s %s\n' "$1" "${2:-}"
+    ((FAIL_COUNT++))
+}
+
+section() {
+    printf '\n\033[1m%s\033[0m\n' "$1"
+}
+
+get_java_major() {
+    java -version 2>&1 |
+        sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' |
+        head -n 1
+}
+
+check_command() {
+    local command_name="$1"
+    local display_name="${2:-$1}"
+
+    if tadk_command_exists "$command_name"; then
+        pass "$display_name" "$(command -v "$command_name")"
+    else
+        fail "$display_name" "未找到命令：$command_name"
+    fi
+}
+
+printf '\n'
+printf '\033[1mTermux Android DevKit Doctor\033[0m\n'
+printf '========================================\n'
+
+section "系统环境"
+
+if [[ -n "${PREFIX:-}" && -d "$PREFIX" ]]; then
+    pass "Termux PREFIX" "$PREFIX"
+else
+    fail "Termux PREFIX" "PREFIX 环境变量未设置"
+fi
+
+ARCH="$(uname -m 2>/dev/null || true)"
+
+case "$ARCH" in
+    aarch64|arm64)
+        pass "CPU 架构" "$ARCH"
+        ;;
+    *)
+        warn "CPU 架构" "${ARCH:-未知}，TADK 主要面向 ARM64"
+        ;;
+esac
+
+ANDROID_VERSION="$(getprop ro.build.version.release 2>/dev/null || true)"
+
+if [[ -n "$ANDROID_VERSION" ]]; then
+    pass "Android 版本" "$ANDROID_VERSION"
+else
+    warn "Android 版本" "无法通过 getprop 获取"
+fi
+
+section "基础工具"
+
+check_command git "Git"
+check_command curl "curl"
+check_command unzip "unzip"
+check_command sed "sed"
+check_command grep "grep"
+
+section "Java"
+
+if tadk_command_exists java; then
+    JAVA_PATH="$(command -v java)"
+    JAVA_MAJOR="$(get_java_major)"
+
+    if [[ "$JAVA_MAJOR" == "17" ]]; then
+        pass "Java" "JDK 17 · $JAVA_PATH"
+    elif [[ -n "$JAVA_MAJOR" ]]; then
+        warn "Java" "当前为 JDK $JAVA_MAJOR，推荐 JDK 17"
+    else
+        fail "Java" "存在 java，但无法识别版本"
+    fi
+else
+    fail "Java" "未安装，执行：pkg install openjdk-17"
+fi
+
+if [[ -n "${JAVA_HOME:-}" ]]; then
+    if [[ -d "$JAVA_HOME" ]]; then
+        pass "JAVA_HOME" "$JAVA_HOME"
+    else
+        fail "JAVA_HOME" "目录不存在：$JAVA_HOME"
+    fi
+else
+    warn "JAVA_HOME" "未设置"
+fi
+
+section "Android SDK"
+
+if [[ -n "${ANDROID_HOME:-}" ]]; then
+    if [[ -d "$ANDROID_HOME" ]]; then
+        pass "ANDROID_HOME" "$ANDROID_HOME"
+    else
+        fail "ANDROID_HOME" "目录不存在：$ANDROID_HOME"
+    fi
+else
+    fail "ANDROID_HOME" "环境变量未设置"
+fi
+
+if tadk_command_exists sdkmanager; then
+    SDKMANAGER_PATH="$(command -v sdkmanager)"
+    pass "sdkmanager" "$SDKMANAGER_PATH"
+else
+    fail "sdkmanager" "未找到 Android SDK Command-line Tools"
+fi
+
+if [[ -n "${ANDROID_HOME:-}" ]]; then
+    PLATFORM_JAR="$ANDROID_HOME/platforms/android-36/android.jar"
+
+    if [[ -f "$PLATFORM_JAR" ]]; then
+        pass "Android API 36" "$PLATFORM_JAR"
+    else
+        fail "Android API 36" "未找到 android.jar"
+    fi
+
+    BUILD_TOOLS_DIR=""
+
+    if [[ -d "$ANDROID_HOME/build-tools" ]]; then
+        BUILD_TOOLS_DIR="$(
+            find "$ANDROID_HOME/build-tools" \
+                -mindepth 1 \
+                -maxdepth 1 \
+                -type d \
+                -printf '%f\n' 2>/dev/null |
+                sort -V |
+                tail -n 1
+        )"
+    fi
+
+    if [[ -n "$BUILD_TOOLS_DIR" ]]; then
+        pass "Build Tools" "$BUILD_TOOLS_DIR"
+    else
+        fail "Build Tools" "未找到 Android Build Tools"
+    fi
+fi
+
+section "Termux Android 工具"
+
+if tadk_command_exists aapt2; then
+    AAPT2_PATH="$(command -v aapt2)"
+    AAPT2_ARCH="$(file "$AAPT2_PATH" 2>/dev/null || true)"
+
+    if grep -qiE 'aarch64|ARM' <<<"$AAPT2_ARCH"; then
+        pass "aapt2" "$AAPT2_PATH · ARM64"
+    else
+        warn "aapt2" "$AAPT2_PATH · 未确认 ARM64"
+    fi
+else
+    fail "aapt2" "执行：pkg install aapt2"
+fi
+
+check_command aidl "aidl"
+check_command apksigner "apksigner"
+check_command d8 "d8"
+check_command adb "adb"
+
+section "Gradle 配置"
+
+GLOBAL_GRADLE_PROPERTIES="$HOME/.gradle/gradle.properties"
+
+if [[ -f "$GLOBAL_GRADLE_PROPERTIES" ]]; then
+    pass "全局 Gradle 配置" "$GLOBAL_GRADLE_PROPERTIES"
+
+    AAPT2_OVERRIDE="$(
+        sed -n \
+            's/^android\.aapt2FromMavenOverride=//p' \
+            "$GLOBAL_GRADLE_PROPERTIES" |
+            tail -n 1
+    )"
+
+    if [[ -n "$AAPT2_OVERRIDE" ]]; then
+        if [[ -x "$AAPT2_OVERRIDE" ]]; then
+            pass "AAPT2 Override" "$AAPT2_OVERRIDE"
+        else
+            fail "AAPT2 Override" "目标不可执行：$AAPT2_OVERRIDE"
+        fi
+    else
+        fail "AAPT2 Override" "未配置 android.aapt2FromMavenOverride"
+    fi
+else
+    fail "全局 Gradle 配置" "未找到 $GLOBAL_GRADLE_PROPERTIES"
+fi
+
+section "TADK"
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+if [[ -f "$TADK_ROOT/VERSION" ]]; then
+    TADK_VERSION="$(<"$TADK_ROOT/VERSION")"
+    pass "TADK 版本" "$TADK_VERSION"
+else
+    warn "TADK 版本" "VERSION 文件不存在"
+fi
+
+if [[ -x "$TADK_ROOT/bin/tadk" ]]; then
+    pass "tadk 入口" "$TADK_ROOT/bin/tadk"
+else
+    fail "tadk 入口" "不可执行或不存在"
+fi
+
+if [[ -x "$TADK_ROOT/bin/newapp" ]]; then
+    pass "newapp 命令" "$TADK_ROOT/bin/newapp"
+else
+    fail "newapp 命令" "不可执行或不存在"
+fi
+
+if [[ -d "$TADK_ROOT/templates/compose-app" ]]; then
+    pass "Compose 模板" "$TADK_ROOT/templates/compose-app"
+else
+    fail "Compose 模板" "模板目录不存在"
+fi
+
+section "存储空间"
+
+AVAILABLE_KB="$(
+    df -Pk "$HOME" 2>/dev/null |
+        awk 'NR == 2 { print $4 }'
+)"
+
+if [[ "$AVAILABLE_KB" =~ ^[0-9]+$ ]]; then
+    AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
+
+    if (( AVAILABLE_GB >= 10 )); then
+        pass "可用空间" "${AVAILABLE_GB} GB"
+    elif (( AVAILABLE_GB >= 5 )); then
+        warn "可用空间" "${AVAILABLE_GB} GB，建议预留至少 10 GB"
+    else
+        fail "可用空间" "${AVAILABLE_GB} GB，空间不足"
+    fi
+else
+    warn "可用空间" "无法获取"
+fi
+
+printf '\n========================================\n'
+printf '检查完成：'
+printf '\033[32m %d 正常\033[0m，' "$PASS_COUNT"
+printf '\033[33m%d 警告\033[0m，' "$WARN_COUNT"
+printf '\033[31m%d 失败\033[0m\n' "$FAIL_COUNT"
+
+if (( FAIL_COUNT > 0 )); then
+    printf '\n环境存在需要修复的问题。\n'
+    exit 1
+elif (( WARN_COUNT > 0 )); then
+    printf '\n环境可用，但存在建议处理的警告。\n'
+    exit 0
+else
+    printf '\n环境状态良好，可以开始 Android 开发。\n'
+    exit 0
+fi

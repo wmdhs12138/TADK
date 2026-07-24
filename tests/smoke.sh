@@ -70,6 +70,15 @@ run_test "tadk info --help" \
 run_test "compat bin/info --help" \
     "$TADK_ROOT/bin/info" --help
 
+run_test "tadk clean --help" \
+    "$TADK_ROOT/bin/tadk" clean --help
+
+run_test "compat bin/clean --help" \
+    "$TADK_ROOT/bin/clean" --help
+
+run_test "compat bin/doctor --help" \
+    "$TADK_ROOT/bin/doctor" --help
+
 run_test "tadk --help" \
     "$TADK_ROOT/bin/tadk" --help
 
@@ -87,6 +96,12 @@ run_test "clean --help" \
 
 run_test "info --help" \
     "$TADK_ROOT/bin/info" --help
+
+run_test "clean implementation exists" \
+    test -x "$TADK_ROOT/commands/clean.sh"
+
+run_test "doctor implementation exists" \
+    test -x "$TADK_ROOT/commands/doctor.sh"
 
 printf '\n%s\n' '========================================'
 printf '通过：%d\n' "$PASS_COUNT"
