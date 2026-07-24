@@ -118,6 +118,15 @@ run_test "compat bin/run --help" \
 run_test "run implementation exists" \
     test -x "$TADK_ROOT/commands/run.sh"
 
+run_test "tadk install --help" \
+    "$TADK_ROOT/bin/tadk" install --help
+
+run_test "compat bin/install --help" \
+    "$TADK_ROOT/bin/install" --help
+
+run_test "install implementation exists" \
+    test -x "$TADK_ROOT/commands/install.sh"
+
 printf '\n%s\n' '========================================'
 printf '通过：%d\n' "$PASS_COUNT"
 printf '失败：%d\n' "$FAIL_COUNT"

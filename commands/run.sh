@@ -9,6 +9,7 @@ source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/project.sh"
 source "$TADK_ROOT/lib/apk.sh"
 source "$TADK_ROOT/lib/build.sh"
+source "$TADK_ROOT/lib/adb.sh"
 
 BUILD_TYPE="debug"
 INSTALL_MODE="open"
@@ -75,32 +76,12 @@ run_open_installer() {
     fi
 }
 
-run_require_adb_device() {
-    local adb_state=""
-
-    tadk_require_command adb \
-        "请执行：pkg install android-tools"
-
-    adb_state="$(adb get-state 2>/dev/null || true)"
-
-    if [[ "$adb_state" != "device" ]]; then
-        printf '\n当前 ADB 设备状态：%s\n' \
-            "${adb_state:-未连接}"
-
-        printf '请先连接无线调试设备。\n'
-        return 1
-    fi
-}
-
 run_adb_install() {
     local apk_path="$1"
 
-    run_require_adb_device ||
-        return 1
-
     tadk_info "通过 ADB 安装 APK"
 
-    adb install -r "$apk_path"
+    tadk_adb_install_replace "$apk_path"
 
     tadk_success "ADB 安装成功"
 }
