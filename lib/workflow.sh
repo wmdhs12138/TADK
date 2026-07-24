@@ -134,7 +134,6 @@ _workflow_run_hook_list() {
 
     local hook_list="$1"
     local hook
-    local exit_code
 
     [[ -n "$hook_list" ]] || return 0
 
@@ -144,11 +143,10 @@ _workflow_run_hook_list() {
             return 127
         fi
 
-        "$hook"
-        exit_code=$?
-
-        if (( exit_code != 0 )); then
-            return "$exit_code"
+        if "$hook"; then
+            :
+        else
+            return $?
         fi
     done
 }
@@ -254,7 +252,6 @@ workflow_step() {
     local step="$1"
     local function_name
     local condition_function
-    local exit_code
 
     _workflow_require_registered_step "$step" || return $?
 
@@ -278,21 +275,25 @@ workflow_step() {
         return 127
     fi
 
-    _workflow_run_hook_list "${TADK_WORKFLOW_BEFORE[$step]:-}"
-    exit_code=$?
-
-    if (( exit_code != 0 )); then
-        return "$exit_code"
+    if _workflow_run_hook_list \
+        "${TADK_WORKFLOW_BEFORE[$step]:-}"; then
+        :
+    else
+        return $?
     fi
 
-    "$function_name"
-    exit_code=$?
-
-    if (( exit_code != 0 )); then
-        return "$exit_code"
+    if "$function_name"; then
+        :
+    else
+        return $?
     fi
 
-    _workflow_run_hook_list "${TADK_WORKFLOW_AFTER[$step]:-}"
+    if _workflow_run_hook_list \
+        "${TADK_WORKFLOW_AFTER[$step]:-}"; then
+        :
+    else
+        return $?
+    fi
 }
 
 workflow_run() {
@@ -302,14 +303,12 @@ workflow_run() {
     fi
 
     local step
-    local exit_code
 
     for step in "$@"; do
-        workflow_step "$step"
-        exit_code=$?
-
-        if (( exit_code != 0 )); then
-            return "$exit_code"
+        if workflow_step "$step"; then
+            :
+        else
+            return $?
         fi
     done
 }
