@@ -6,6 +6,7 @@ install|通过 ADB 安装已有 APK|commands/install.sh
 launch|通过 ADB 启动已安装的 Android 应用|commands/launch.sh
 logcat|查看当前 Android 应用的运行日志|commands/logcat.sh
 run|构建并运行当前 Android 项目|commands/run.sh
+dev|执行构建、安装、启动和日志监听开发流程|commands/dev.sh
 clean|清理当前项目构建缓存|commands/clean.sh
 info|显示当前 Android 项目信息|commands/info.sh
 test|运行 TADK 冒烟测试|tests/smoke.sh

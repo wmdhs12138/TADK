@@ -181,6 +181,15 @@ run_test "adb package pid function exists" \
         declare -F tadk_adb_package_pid >/dev/null
     "
 
+run_test "tadk dev --help" \
+    "$TADK_ROOT/bin/tadk" dev --help
+
+run_test "compat bin/dev --help" \
+    "$TADK_ROOT/bin/dev" --help
+
+run_test "dev implementation exists" \
+    test -x "$TADK_ROOT/commands/dev.sh"
+
 printf '\n%s\n' '========================================'
 printf '通过：%d\n' "$PASS_COUNT"
 printf '失败：%d\n' "$FAIL_COUNT"
