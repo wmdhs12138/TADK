@@ -7,6 +7,7 @@
 #
 # Public API:
 #   workflow_register STEP FUNCTION
+#   workflow_register_if STEP CONDITION_FUNCTION FUNCTION
 #   workflow_before STEP FUNCTION
 #   workflow_after STEP FUNCTION
 #   workflow_has_step STEP
@@ -26,6 +27,7 @@ fi
 readonly TADK_WORKFLOW_SH_LOADED=1
 
 declare -gA TADK_WORKFLOW_STEPS=()
+declare -gA TADK_WORKFLOW_CONDITIONS=()
 declare -gA TADK_WORKFLOW_BEFORE=()
 declare -gA TADK_WORKFLOW_AFTER=()
 
@@ -169,6 +171,33 @@ workflow_register() {
     fi
 
     TADK_WORKFLOW_STEPS["$step"]="$function_name"
+    TADK_WORKFLOW_CONDITIONS["$step"]=''
+    TADK_WORKFLOW_BEFORE["$step"]=''
+    TADK_WORKFLOW_AFTER["$step"]=''
+}
+
+workflow_register_if() {
+    if (( $# != 3 )); then
+        _workflow_error \
+            'usage: workflow_register_if STEP CONDITION_FUNCTION FUNCTION'
+        return 64
+    fi
+
+    local step="$1"
+    local condition_function="$2"
+    local function_name="$3"
+
+    _workflow_require_valid_step_name "$step" || return $?
+    _workflow_require_function "$condition_function" || return $?
+    _workflow_require_function "$function_name" || return $?
+
+    if workflow_has_step "$step"; then
+        _workflow_error "step already registered: $step"
+        return 65
+    fi
+
+    TADK_WORKFLOW_STEPS["$step"]="$function_name"
+    TADK_WORKFLOW_CONDITIONS["$step"]="$condition_function"
     TADK_WORKFLOW_BEFORE["$step"]=''
     TADK_WORKFLOW_AFTER["$step"]=''
 }
@@ -224,11 +253,25 @@ workflow_step() {
 
     local step="$1"
     local function_name
+    local condition_function
     local exit_code
 
     _workflow_require_registered_step "$step" || return $?
 
     function_name="${TADK_WORKFLOW_STEPS[$step]}"
+    condition_function="${TADK_WORKFLOW_CONDITIONS[$step]:-}"
+
+    if [[ -n "$condition_function" ]]; then
+        if ! declare -F "$condition_function" >/dev/null 2>&1; then
+            _workflow_error \
+                "registered function is unavailable: $condition_function"
+            return 127
+        fi
+
+        if ! "$condition_function"; then
+            return 0
+        fi
+    fi
 
     if ! declare -F "$function_name" >/dev/null 2>&1; then
         _workflow_error "registered function is unavailable: $function_name"
