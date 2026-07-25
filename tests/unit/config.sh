@@ -220,6 +220,25 @@ case_rejects_invalid_variant() {
         "invalid variant 'benchmark'"
 }
 
+case_invalid_config_returns_65_directly() {
+    local root status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_config \
+        "$root" \
+        $'version=1\nmodule=app\nvariant=benchmark\n'
+
+    tadk_config_load "$root" >/dev/null 2>&1 ||
+        status=$?
+
+    assert_equals '65' "$status"
+    assert_equals '' "$TADK_CONFIG_VERSION"
+    assert_equals '' "$TADK_CONFIG_MODULE"
+    assert_equals '' "$TADK_CONFIG_VARIANT"
+}
+
 case_failure_clears_previous_values() {
     local valid_root invalid_root status=0
 
@@ -289,6 +308,10 @@ run_case \
 run_case \
     'rejects invalid variant' \
     case_rejects_invalid_variant
+
+run_case \
+    'invalid config returns 65 directly' \
+    case_invalid_config_returns_65_directly
 
 run_case \
     'failure clears previous values' \
