@@ -79,7 +79,17 @@ set -Eeuo pipefail
 printf 'adb' >> "$MOCK_LOG"
 for argument in "$@"; do printf ' %q' "$argument" >> "$MOCK_LOG"; done
 printf '\n' >> "$MOCK_LOG"
-command_name="${1:-}"; shift || true
+
+selected_serial=""
+
+if [[ "${1:-}" == "-s" ]]; then
+    selected_serial="${2:-}"
+    shift 2
+fi
+
+command_name="${1:-}"
+shift || true
+
 case "$command_name" in
     get-state) cat "$MOCK_ADB_STATE_FILE" ;;
     install)

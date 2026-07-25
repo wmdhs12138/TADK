@@ -13,6 +13,7 @@ source "$TADK_ROOT/lib/adb.sh"
 source "$TADK_ROOT/lib/logcat.sh"
 
 PACKAGE_NAME=""
+DEVICE_SERIAL=""
 SHOW_ALL=false
 CRASH_MODE=false
 CLEAR_FIRST=false
@@ -38,6 +39,7 @@ usage() {
 
 选项：
   --package NAME     指定应用包名
+  --device SERIAL    指定 ADB 目标设备
   --all              显示设备全部日志，不按应用过滤
   --crash            显示 crash 缓冲区，并自动退出
   --clear            读取日志前先清空缓冲区
@@ -68,6 +70,7 @@ usage() {
   tadk logcat --dump
   tadk logcat --lines 100
   tadk logcat --package com.example.app
+  tadk logcat --device 172.19.0.1:39439
   tadk logcat --launch
   tadk logcat --restart --clear
   tadk logcat --wait
@@ -202,6 +205,22 @@ while [[ $# -gt 0 ]]; do
             PACKAGE_NAME="${1#--package=}"
             ;;
 
+        --device)
+            shift
+
+            [[ $# -gt 0 ]] ||
+                tadk_die "--device 缺少设备序列号"
+
+            DEVICE_SERIAL="$1"
+            ;;
+
+        --device=*)
+            DEVICE_SERIAL="${1#--device=}"
+
+            [[ -n "$DEVICE_SERIAL" ]] ||
+                tadk_die "--device 缺少设备序列号"
+            ;;
+
         --all)
             SHOW_ALL=true
             ;;
@@ -289,6 +308,10 @@ while [[ $# -gt 0 ]]; do
 
     shift
 done
+
+if [[ -n "$DEVICE_SERIAL" ]]; then
+    tadk_adb_set_serial "$DEVICE_SERIAL"
+fi
 
 tadk_logcat_validate_format "$FORMAT" ||
     tadk_die "不支持的日志格式：$FORMAT"
@@ -477,6 +500,7 @@ if [[ "$RAW_OUTPUT" == false ]]; then
     tadk_heading "TADK Logcat"
     tadk_separator
     printf '应用包名：%s\n' "$RESOLVED_PACKAGE_NAME"
+    printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
     printf '进程 PID：%s\n' "$PACKAGE_PID"
     printf '格式：%s\n' "$FORMAT"
     printf '监听：%s\n' "$([[ "$DUMP_MODE" == true ]] && printf false || printf true)"
@@ -488,6 +512,6 @@ if [[ "$RAW_OUTPUT" == false ]]; then
     fi
 fi
 
-adb logcat \
+tadk_adb logcat \
     --pid="$PACKAGE_PID" \
     "${LOGCAT_ARGS[@]}"
