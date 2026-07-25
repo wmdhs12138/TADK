@@ -35,6 +35,40 @@ tadk_build_task() {
     esac
 }
 
+tadk_build_validate_module() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local module="$1"
+
+    [[ -n "$module" ]] || return 1
+
+    case "$module" in
+        *[!A-Za-z0-9_.-]*)
+            return 1
+            ;;
+    esac
+}
+
+tadk_build_module_task() {
+    if (( $# != 2 )); then
+        return 64
+    fi
+
+    local module="$1"
+    local build_type="$2"
+    local task=""
+
+    tadk_build_validate_module "$module" ||
+        return 1
+
+    task="$(tadk_build_task "$build_type")" ||
+        return 1
+
+    printf ':%s:%s\n' "$module" "$task"
+}
+
 tadk_build_require_gradlew() {
     local project_root="$1"
     local gradlew=""
