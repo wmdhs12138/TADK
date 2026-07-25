@@ -67,6 +67,10 @@ _config_validate_module() {
     [[ -n "$module" ]] || return 1
 
     case "$module" in
+        .|..)
+            return 1
+            ;;
+
         *[!A-Za-z0-9_.-]*)
             return 1
             ;;
