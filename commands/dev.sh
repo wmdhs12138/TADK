@@ -10,7 +10,8 @@ source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/logcat.sh"
 source "$TADK_ROOT/lib/workflow.sh"
 
-BUILD_TYPE="debug"
+BUILD_TYPE=""
+BUILD_TYPE_EXPLICIT=false
 CLEAN_FIRST=false
 NO_CACHE=false
 RERUN_TASKS=false
@@ -45,7 +46,7 @@ usage() {
   dev 只负责编排现有原子命令，不重复实现底层逻辑。
 
 构建选项：
-  --debug             构建并安装 Debug APK（默认）
+  --debug             构建并安装 Debug APK
   --release           构建并安装 Release APK
   --clean             构建前执行 Gradle clean
   --no-cache          禁用 Gradle 构建缓存
@@ -93,10 +94,12 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --debug)
             BUILD_TYPE="debug"
+            BUILD_TYPE_EXPLICIT=true
             ;;
 
         --release)
             BUILD_TYPE="release"
+            BUILD_TYPE_EXPLICIT=true
             ;;
 
         --clean)
@@ -212,10 +215,15 @@ fi
 tadk_logcat_validate_format "$LOGCAT_FORMAT" ||
     tadk_die "不支持的日志格式：$LOGCAT_FORMAT"
 
-BUILD_ARGS=("--$BUILD_TYPE")
-INSTALL_ARGS=("--$BUILD_TYPE")
+BUILD_ARGS=()
+INSTALL_ARGS=()
 LAUNCH_ARGS=()
 LOGCAT_ARGS=(--format "$LOGCAT_FORMAT")
+
+if [[ "$BUILD_TYPE_EXPLICIT" == true ]]; then
+    BUILD_ARGS+=("--$BUILD_TYPE")
+    INSTALL_ARGS+=("--$BUILD_TYPE")
+fi
 
 if [[ "$CLEAN_FIRST" == true ]]; then
     BUILD_ARGS+=(--clean)
@@ -329,7 +337,12 @@ workflow_register_if \
 
 tadk_heading "TADK Dev"
 tadk_separator
-printf '构建类型：%s\n' "$BUILD_TYPE"
+if [[ "$BUILD_TYPE_EXPLICIT" == true ]]; then
+    printf '构建类型：%s（命令行指定）\n' "$BUILD_TYPE"
+else
+    printf '构建类型：由项目配置或默认值决定\n'
+fi
+
 printf '构建前清理：%s\n' "$CLEAN_FIRST"
 printf '清空旧日志：%s\n' "$CLEAR_LOGCAT"
 printf '重新启动应用：%s\n' "$RESTART_APP"
