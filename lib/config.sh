@@ -253,22 +253,26 @@ tadk_config_load() {
             return 65
         fi
 
-        _config_assign_value \
+        local assign_status=0
+
+        if _config_assign_value \
             "$key" \
             "$value" \
-            "$config_file"
-        local assign_status=$?
-
-        if (( assign_status != 0 )); then
+            "$config_file"; then
+            :
+        else
+            assign_status=$?
             _config_reset
             return "$assign_status"
         fi
     done < "$config_file"
 
-    _config_validate_loaded "$config_file"
-    local validate_status=$?
+    local validate_status=0
 
-    if (( validate_status != 0 )); then
+    if _config_validate_loaded "$config_file"; then
+        :
+    else
+        validate_status=$?
         _config_reset
         return "$validate_status"
     fi

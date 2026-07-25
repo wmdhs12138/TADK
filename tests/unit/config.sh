@@ -239,6 +239,31 @@ case_invalid_config_returns_65_directly() {
     assert_equals '' "$TADK_CONFIG_VARIANT"
 }
 
+case_invalid_config_survives_errexit_caller() {
+    local root status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_config \
+        "$root" \
+        $'version=1\nmodule=app\nvariant=benchmark\n'
+
+    (
+        set -Eeuo pipefail
+
+        source "$TADK_ROOT/lib/config.sh"
+
+        if tadk_config_load "$root" >/dev/null 2>&1; then
+            exit 0
+        else
+            exit $?
+        fi
+    ) || status=$?
+
+    assert_equals '65' "$status"
+}
+
 case_failure_clears_previous_values() {
     local valid_root invalid_root status=0
 
@@ -312,6 +337,10 @@ run_case \
 run_case \
     'invalid config returns 65 directly' \
     case_invalid_config_returns_65_directly
+
+run_case \
+    'invalid config survives errexit caller' \
+    case_invalid_config_survives_errexit_caller
 
 run_case \
     'failure clears previous values' \
