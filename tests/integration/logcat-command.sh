@@ -165,4 +165,48 @@ assert_contains \
     "--launch 不能与 --all 同时使用" \
     "应显示选项冲突"
 
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --launch \
+        --crash \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--launch 与 --crash 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--launch 不能与 --crash 同时使用" \
+    "应显示 launch 与 crash 冲突"
+
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --launch \
+        --clear-only \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--launch 与 --clear-only 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--launch 不能与 --clear-only 同时使用" \
+    "应显示 launch 与 clear-only 冲突"
+
 printf 'PASS: logcat command integration\n'
