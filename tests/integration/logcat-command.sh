@@ -293,4 +293,48 @@ assert_contains \
     "--restart 不能与 --all 同时使用" \
     "应显示 restart 与 all 冲突"
 
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --restart \
+        --crash \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--restart 与 --crash 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--restart 不能与 --crash 同时使用" \
+    "应显示 restart 与 crash 冲突"
+
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --restart \
+        --clear-only \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--restart 与 --clear-only 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--restart 不能与 --clear-only 同时使用" \
+    "应显示 restart 与 clear-only 冲突"
+
 printf 'PASS: logcat command integration\n'
