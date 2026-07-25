@@ -12,31 +12,45 @@ source "$TADK_ROOT/lib/apk.sh"
 
 ACTION=""
 APK_ARGUMENT=""
+RELEASE_BUILD_ARGS=()
 
 usage() {
     cat <<'HELP'
 用法：
   tadk release doctor
   tadk release verify [APK]
+  tadk release build [构建选项]
 
 操作：
   doctor              检查 Android Release 签名验证环境
   verify [APK]        验证 APK 签名、证书和文件摘要
+  build               构建 Release APK 并验证签名
+
+构建选项：
+  --clean             构建前执行 Gradle clean
+  --no-cache          禁用 Gradle 构建缓存
+  --rerun             强制重新执行 Gradle 任务
+  --                  将后续参数直接传递给 Gradle
 
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
   Release APK。如果存在 .tadk/project.conf，则只检查配置的 module。
 
+  build 始终构建 Release APK，并复用 tadk build 的项目配置、
+  模块解析和 Gradle 参数处理。构建成功后自动执行签名验证。
+
   本命令不会：
     - 创建或修改 keystore
     - 读取或保存签名密码
     - 修改 Gradle signingConfig
-    - 构建 APK
 
 示例：
   tadk release doctor
   tadk release verify
   tadk release verify app/build/outputs/apk/release/app-release.apk
+  tadk release build
+  tadk release build --clean
+  tadk release build -- --stacktrace
 HELP
 }
 
@@ -220,6 +234,41 @@ resolve_verify_apk() {
     printf '%s\n' "$resolved_path"
 }
 
+release_build() {
+    local build_status=0
+    local apk_path=""
+
+    tadk_heading "TADK Release Build"
+    tadk_separator
+    printf '流程：构建 Release APK 后验证签名\n'
+
+    if (( ${#RELEASE_BUILD_ARGS[@]} > 0 )); then
+        printf '构建参数：'
+        printf '%q ' "${RELEASE_BUILD_ARGS[@]}"
+        printf '\n'
+    fi
+
+    tadk_separator
+    printf '\n'
+
+    if "$TADK_ROOT/bin/tadk"         build         --release         "${RELEASE_BUILD_ARGS[@]}"; then
+        build_status=0
+    else
+        build_status=$?
+        tadk_error "Release 构建失败"
+        return "$build_status"
+    fi
+
+    apk_path="$(
+        resolve_verify_apk
+    )" || return $?
+
+    printf '\n'
+    tadk_info "开始验证构建产物签名"
+
+    verify_apk_signature "$apk_path"
+}
+
 verify_apk_signature() {
     if (( $# != 1 )); then
         tadk_error \
@@ -278,51 +327,98 @@ verify_apk_signature() {
     tadk_success "APK 签名有效"
 }
 
-while (( $# > 0 )); do
-    case "$1" in
-        -h|--help)
-            usage
-            exit 0
-            ;;
-
-        -*)
-            tadk_die "未知参数：$1" 64
-            ;;
-
-        *)
-            if [[ -z "$ACTION" ]]; then
-                ACTION="$1"
-            elif [[ "$ACTION" == "verify" &&
-                    -z "$APK_ARGUMENT" ]]; then
-                APK_ARGUMENT="$1"
-            else
-                tadk_die "多余参数：$1" 64
-            fi
-            ;;
-    esac
-
-    shift
-done
-
-[[ -n "$ACTION" ]] || {
+if (( $# == 0 )); then
     usage
     exit 64
-}
+fi
+
+case "$1" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+
+    -*)
+        tadk_die "未知参数：$1" 64
+        ;;
+
+    *)
+        ACTION="$1"
+        shift
+        ;;
+esac
 
 case "$ACTION" in
     doctor)
-        [[ -z "$APK_ARGUMENT" ]] ||
-            tadk_die "doctor 不接受 APK 参数" 64
+        (( $# == 0 )) ||
+            tadk_die "doctor 不接受其他参数" 64
 
         release_doctor
         ;;
 
     verify)
+        while (( $# > 0 )); do
+            case "$1" in
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                -*)
+                    tadk_die "verify 不支持参数：$1" 64
+                    ;;
+
+                *)
+                    [[ -z "$APK_ARGUMENT" ]] ||
+                        tadk_die "verify 只接受一个 APK 路径" 64
+
+                    APK_ARGUMENT="$1"
+                    ;;
+            esac
+
+            shift
+        done
+
         APK_PATH="$(
             resolve_verify_apk "$APK_ARGUMENT"
         )" || exit $?
 
         verify_apk_signature "$APK_PATH"
+        ;;
+
+    build)
+        while (( $# > 0 )); do
+            case "$1" in
+                --clean|--no-cache|--rerun)
+                    RELEASE_BUILD_ARGS+=("$1")
+                    ;;
+
+                --)
+                    RELEASE_BUILD_ARGS+=(--)
+                    shift
+
+                    while (( $# > 0 )); do
+                        RELEASE_BUILD_ARGS+=("$1")
+                        shift
+                    done
+
+                    break
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                *)
+                    tadk_die "build 不支持参数：$1" 64
+                    ;;
+            esac
+
+            shift
+        done
+
+        release_build
         ;;
 
     *)

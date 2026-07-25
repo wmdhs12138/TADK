@@ -22,7 +22,16 @@ mkdir -p \
 
 cat > "$MOCK_PROJECT/gradlew" <<'GRADLEW'
 #!/data/data/com.termux/files/usr/bin/bash
-exit 0
+
+set -Eeuo pipefail
+
+printf 'gradlew' >> "$MOCK_LOG"
+
+for argument in "$@"; do
+    printf ' %q' "$argument" >> "$MOCK_LOG"
+done
+
+printf '\n' >> "$MOCK_LOG"
 GRADLEW
 
 cat > "$MOCK_PROJECT/settings.gradle.kts" <<'SETTINGS'
@@ -366,5 +375,92 @@ if [[ "$calls" == *"$OTHER_APK"* ]]; then
 fi
 
 printf 'PASS project config limits automatic APK resolution to module\n\n'
+
+
+printf 'TEST release build compiles and verifies configured module\n'
+
+: > "$MOCK_LOG"
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        build \
+        --clean \
+        --no-cache \
+        -- \
+        --stacktrace \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "TADK Release Build" \
+    "release build 应显示流程标题"
+
+assert_contains \
+    "$output" \
+    "APK 签名有效" \
+    "release build 应验证构建产物"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "gradlew clean --console=plain --no-build-cache --stacktrace" \
+    "release build 应先清理项目"
+
+assert_contains \
+    "$calls" \
+    "gradlew :app:assembleRelease --console=plain --no-build-cache --stacktrace" \
+    "release build 应构建配置模块的 Release APK"
+
+assert_contains \
+    "$calls" \
+    "apksigner verify --verbose --print-certs $RELEASE_APK" \
+    "release build 应验证配置模块的 Release APK"
+
+gradle_line="$(
+    grep -n '^gradlew ' "$MOCK_LOG" |
+        head -n 1 |
+        cut -d: -f1
+)"
+
+signer_line="$(
+    grep -n '^apksigner ' "$MOCK_LOG" |
+        head -n 1 |
+        cut -d: -f1
+)"
+
+[[ -n "$gradle_line" && -n "$signer_line" ]] ||
+    fail "应同时记录 Gradle 构建和签名验证"
+
+(( gradle_line < signer_line )) ||
+    fail "必须先完成构建，再执行签名验证"
+
+printf 'PASS release build compiles and verifies configured module\n\n'
+
+printf 'TEST release build rejects unsupported option\n'
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        build \
+        --unknown \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "release build 未知选项应失败"
+
+assert_contains \
+    "$output" \
+    "build 不支持参数" \
+    "应说明 build 参数不受支持"
+
+printf 'PASS release build rejects unsupported option\n\n'
 
 printf 'PASS: release command integration\n'
