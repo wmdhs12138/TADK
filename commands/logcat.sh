@@ -20,6 +20,7 @@ CLEAR_ONLY=false
 DUMP_MODE=false
 RAW_OUTPUT=false
 AUTO_LAUNCH=false
+RESTART_APP=false
 FORMAT="threadtime"
 LINES=""
 EXTRA_ARGS=()
@@ -44,6 +45,7 @@ usage() {
   --lines NUMBER     只输出最近指定行数，并退出
   --format FORMAT    设置日志格式，默认 threadtime
   --launch           应用未运行时自动启动并等待进程
+  --restart          强制停止后重新启动应用并等待进程
   --raw-output       不输出 TADK 标题，便于重定向或交给 AI
   --                 后续参数直接传递给 adb logcat
   -h, --help         显示帮助
@@ -65,6 +67,7 @@ usage() {
   tadk logcat --lines 100
   tadk logcat --package com.example.app
   tadk logcat --launch
+  tadk logcat --restart --clear
   tadk logcat --all
   tadk logcat --crash
   tadk logcat --raw-output --lines 200 > app.log
@@ -223,6 +226,11 @@ while [[ $# -gt 0 ]]; do
             AUTO_LAUNCH=true
             ;;
 
+        --restart)
+            RESTART_APP=true
+            AUTO_LAUNCH=true
+            ;;
+
         --raw-output)
             RAW_OUTPUT=true
             ;;
@@ -269,15 +277,33 @@ if [[ "$CRASH_MODE" == true && "$SHOW_ALL" == true ]]; then
     tadk_die "--crash 已经读取整个 crash 缓冲区，无需同时使用 --all"
 fi
 
-if [[ "$AUTO_LAUNCH" == true && "$SHOW_ALL" == true ]]; then
+if [[ "$RESTART_APP" == true && "$SHOW_ALL" == true ]]; then
+    tadk_die "--restart 不能与 --all 同时使用"
+fi
+
+if [[ "$RESTART_APP" == true && "$CRASH_MODE" == true ]]; then
+    tadk_die "--restart 不能与 --crash 同时使用"
+fi
+
+if [[ "$RESTART_APP" == true && "$CLEAR_ONLY" == true ]]; then
+    tadk_die "--restart 不能与 --clear-only 同时使用"
+fi
+
+if [[ "$AUTO_LAUNCH" == true &&
+      "$RESTART_APP" == false &&
+      "$SHOW_ALL" == true ]]; then
     tadk_die "--launch 不能与 --all 同时使用"
 fi
 
-if [[ "$AUTO_LAUNCH" == true && "$CRASH_MODE" == true ]]; then
+if [[ "$AUTO_LAUNCH" == true &&
+      "$RESTART_APP" == false &&
+      "$CRASH_MODE" == true ]]; then
     tadk_die "--launch 不能与 --crash 同时使用"
 fi
 
-if [[ "$AUTO_LAUNCH" == true && "$CLEAR_ONLY" == true ]]; then
+if [[ "$AUTO_LAUNCH" == true &&
+      "$RESTART_APP" == false &&
+      "$CLEAR_ONLY" == true ]]; then
     tadk_die "--launch 不能与 --clear-only 同时使用"
 fi
 
@@ -301,7 +327,7 @@ if [[ "$CLEAR_ONLY" == true ]]; then
     exit 0
 fi
 
-if [[ "$CLEAR_FIRST" == true ]]; then
+if [[ "$CLEAR_FIRST" == true && "$RESTART_APP" == false ]]; then
     if [[ "$RAW_OUTPUT" == false ]]; then
         tadk_info "清空日志缓冲区"
     fi
@@ -361,6 +387,24 @@ RESOLVED_PACKAGE_NAME="$(
     resolve_package_name
 )" || tadk_die \
     "无法识别应用包名，请使用：tadk logcat --package <包名>"
+
+if [[ "$RESTART_APP" == true ]]; then
+    if [[ "$RAW_OUTPUT" == false ]]; then
+        tadk_info "停止应用：$RESOLVED_PACKAGE_NAME"
+    fi
+
+    tadk_adb_force_stop_package \
+        "$RESOLVED_PACKAGE_NAME" ||
+        tadk_die "无法停止应用：$RESOLVED_PACKAGE_NAME"
+
+    if [[ "$CLEAR_FIRST" == true ]]; then
+        if [[ "$RAW_OUTPUT" == false ]]; then
+            tadk_info "清空日志缓冲区"
+        fi
+
+        tadk_adb_clear_logcat
+    fi
+fi
 
 PACKAGE_PID="$(
     resolve_package_pid \
