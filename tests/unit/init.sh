@@ -69,6 +69,66 @@ plugins {
 BUILD
 }
 
+create_groovy_application_module() {
+    local root="$1"
+    local module="$2"
+
+    mkdir -p "$root/$module"
+
+    cat > "$root/$module/build.gradle" <<'BUILD'
+plugins {
+    id 'com.android.application'
+}
+BUILD
+}
+
+create_apply_plugin_module() {
+    local root="$1"
+    local module="$2"
+
+    mkdir -p "$root/$module"
+
+    cat > "$root/$module/build.gradle" <<'BUILD'
+apply plugin: 'com.android.application'
+BUILD
+}
+
+create_version_catalog_application_module() {
+    local root="$1"
+    local module="$2"
+
+    mkdir -p "$root/gradle" "$root/$module"
+
+    cat > "$root/gradle/libs.versions.toml" <<'CATALOG'
+[plugins]
+android-application = { id = "com.android.application", version = "8.7.3" }
+CATALOG
+
+    cat > "$root/$module/build.gradle.kts" <<'BUILD'
+plugins {
+    alias(libs.plugins.android.application)
+}
+BUILD
+}
+
+create_commented_application_module() {
+    local root="$1"
+    local module="$2"
+
+    mkdir -p "$root/$module"
+
+    cat > "$root/$module/build.gradle.kts" <<'BUILD'
+/*
+plugins {
+    id("com.android.application")
+}
+*/
+plugins {
+    id("com.android.library")
+}
+BUILD
+}
+
 case_requires_two_arguments() {
     local output status=0
 
@@ -195,6 +255,75 @@ case_detects_nested_module() {
     assert_contains "$config" 'module=feature/chat'
 }
 
+case_detects_groovy_application_plugin() {
+    local root config status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_project_root "$root"
+    create_groovy_application_module "$root" mobile
+
+    tadk_init_project "$root" false >/dev/null 2>&1 ||
+        status=$?
+
+    assert_success "$status"
+    config="$(cat "$root/.tadk/project.conf")"
+    assert_contains "$config" 'module=mobile'
+}
+
+case_detects_legacy_apply_plugin() {
+    local root config status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_project_root "$root"
+    create_apply_plugin_module "$root" mobile
+
+    tadk_init_project "$root" false >/dev/null 2>&1 ||
+        status=$?
+
+    assert_success "$status"
+    config="$(cat "$root/.tadk/project.conf")"
+    assert_contains "$config" 'module=mobile'
+}
+
+case_detects_version_catalog_alias() {
+    local root config status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_project_root "$root"
+    create_version_catalog_application_module "$root" mobile
+
+    tadk_init_project "$root" false >/dev/null 2>&1 ||
+        status=$?
+
+    assert_success "$status"
+    config="$(cat "$root/.tadk/project.conf")"
+    assert_contains "$config" 'module=mobile'
+}
+
+case_ignores_commented_application_plugin() {
+    local root output status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_project_root "$root"
+    create_commented_application_module "$root" mobile
+
+    output="$(tadk_init_project "$root" false 2>&1)" ||
+        status=$?
+
+    assert_equals '1' "$status"
+    assert_contains "$output" \
+        'no Android application module with a Gradle build file was found'
+    assert_file_not_exists "$root/.tadk/project.conf"
+}
+
 case_rejects_explicit_library_module() {
     local root output status=0
 
@@ -311,6 +440,22 @@ run_case \
 run_case \
     'detects nested module' \
     case_detects_nested_module
+
+run_case \
+    'detects Groovy application plugin' \
+    case_detects_groovy_application_plugin
+
+run_case \
+    'detects legacy apply plugin' \
+    case_detects_legacy_apply_plugin
+
+run_case \
+    'detects Version Catalog alias' \
+    case_detects_version_catalog_alias
+
+run_case \
+    'ignores commented application plugin' \
+    case_ignores_commented_application_plugin
 
 run_case \
     'rejects explicit library module' \
