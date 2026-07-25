@@ -7,6 +7,7 @@ TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/project.sh"
+source "$TADK_ROOT/lib/config.sh"
 source "$TADK_ROOT/lib/apk.sh"
 
 ACTION=""
@@ -24,7 +25,7 @@ usage() {
 
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
-  Release APK。
+  Release APK。如果存在 .tadk/project.conf，则只检查配置的 module。
 
   本命令不会：
     - 创建或修改 keystore
@@ -144,6 +145,8 @@ release_doctor() {
 resolve_verify_apk() {
     local requested_path="${1:-}"
     local project_root=""
+    local project_module=""
+    local config_status=0
     local resolved_path=""
 
     if [[ -n "$requested_path" ]]; then
@@ -175,15 +178,44 @@ resolve_verify_apk() {
 
     project_root="$(tadk_require_project_root)"
 
-    resolved_path="$(
-        tadk_find_latest_apk \
-            "$project_root" \
-            release
-    )" || {
-        tadk_error \
-            "未找到 Release APK，请先执行：tadk build --release"
-        return 1
-    }
+    if tadk_config_load "$project_root"; then
+        project_module="$TADK_CONFIG_MODULE"
+
+        [[ -d "$project_root/$project_module" ]] || {
+            tadk_error \
+                "配置的模块目录不存在：$project_root/$project_module"
+            return 1
+        }
+
+        resolved_path="$(
+            tadk_apk_resolve_module \
+                "$project_root" \
+                "$project_module" \
+                release
+        )" || {
+            tadk_error \
+                "未在配置模块 $project_module 中找到 Release APK，请先执行：tadk build --release"
+            return 1
+        }
+    else
+        config_status=$?
+
+        if (( config_status != 1 )); then
+            tadk_error \
+                "无法加载项目配置，状态码：$config_status"
+            return "$config_status"
+        fi
+
+        resolved_path="$(
+            tadk_apk_resolve \
+                "$project_root" \
+                release
+        )" || {
+            tadk_error \
+                "未找到 Release APK，请先执行：tadk build --release"
+            return 1
+        }
+    fi
 
     printf '%s\n' "$resolved_path"
 }

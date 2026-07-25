@@ -320,4 +320,50 @@ assert_contains \
     "应说明未知操作"
 
 printf 'PASS unknown release action fails\n\n'
+
+printf 'TEST project config limits automatic APK resolution to module\n'
+
+mkdir -p \
+    "$MOCK_PROJECT/.tadk" \
+    "$MOCK_PROJECT/other/build/outputs/apk/release"
+
+cat > "$MOCK_PROJECT/.tadk/project.conf" <<'CONFIG'
+module=app
+variant=debug
+CONFIG
+
+OTHER_APK="$MOCK_PROJECT/other/build/outputs/apk/release/other-release.apk"
+printf 'other signed apk fixture\n' > "$OTHER_APK"
+
+touch "$OTHER_APK"
+sleep 1
+touch "$RELEASE_APK"
+
+: > "$MOCK_LOG"
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        verify \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "$RELEASE_APK" \
+    "自动验证应使用配置模块中的 Release APK"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "$RELEASE_APK" \
+    "apksigner 应验证配置模块中的 APK"
+
+if [[ "$calls" == *"$OTHER_APK"* ]]; then
+    fail "不应验证其他模块中的 Release APK"
+fi
+
+printf 'PASS project config limits automatic APK resolution to module\n\n'
+
 printf 'PASS: release command integration\n'
