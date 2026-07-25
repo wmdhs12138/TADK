@@ -87,13 +87,26 @@ run_adb_install() {
 }
 
 run_adb_launch() {
+    if (( $# != 2 )); then
+        tadk_error "内部错误：run_adb_launch 需要 PROJECT_ROOT MODULE"
+        return 64
+    fi
+
     local project_root="$1"
+    local module="$2"
     local package_name=""
 
-    package_name="$(
-        tadk_android_package_name "$project_root" ||
-        true
-    )"
+    if [[ -n "$module" ]]; then
+        package_name="$(
+            tadk_android_module_package_name                 "$project_root"                 "$module" ||
+            true
+        )"
+    else
+        package_name="$(
+            tadk_android_package_name "$project_root" ||
+            true
+        )"
+    fi
 
     if [[ -z "$package_name" ]]; then
         tadk_warn "无法识别 applicationId，已跳过启动"
@@ -271,7 +284,7 @@ run_step_adb_install() {
 }
 
 run_step_adb_launch() {
-    run_adb_launch "$PROJECT_ROOT"
+    run_adb_launch         "$PROJECT_ROOT"         "$PROJECT_MODULE"
 }
 
 run_step_complete() {
