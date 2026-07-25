@@ -254,15 +254,9 @@ validate_environment_name() {
         return 64
     fi
 
-    case "$1" in
-        [A-Za-z_][A-Za-z0-9_]*)
-            return 0
-            ;;
+    local environment_name="$1"
 
-        *)
-            return 1
-            ;;
-    esac
+    [[ "$environment_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
 }
 
 resolve_keystore_path() {

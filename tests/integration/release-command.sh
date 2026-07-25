@@ -588,4 +588,64 @@ assert_contains \
 
 printf 'PASS release keystore rejects missing file\n\n'
 
+
+printf 'TEST release keystore accepts single-character environment name\n'
+
+export P='single-character-secret'
+: > "$MOCK_LOG"
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keystore \
+        "$KEYSTORE_FILE" \
+        --storepass-env P \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "keystore 可访问" \
+    "单字符环境变量名称应合法"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "-storepass:env P" \
+    "应将单字符环境变量名称传给 keytool"
+
+if [[ "$output" == *"$P"* ]]; then
+    fail "输出不得包含单字符环境变量中的密码值"
+fi
+
+unset P
+
+printf 'PASS release keystore accepts single-character environment name\n\n'
+
+printf 'TEST release keystore rejects invalid environment name\n'
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keystore \
+        "$KEYSTORE_FILE" \
+        --storepass-env 'AB-CD' \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "包含连字符的环境变量名称应失败"
+
+assert_contains \
+    "$output" \
+    "无效的环境变量名称：AB-CD" \
+    "应明确拒绝非法环境变量名称"
+
+printf 'PASS release keystore rejects invalid environment name\n\n'
+
 printf 'PASS: release command integration\n'
