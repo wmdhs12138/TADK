@@ -7,6 +7,7 @@ TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/project.sh"
+source "$TADK_ROOT/lib/config.sh"
 source "$TADK_ROOT/lib/android.sh"
 source "$TADK_ROOT/lib/adb.sh"
 source "$TADK_ROOT/lib/logcat.sh"
@@ -28,8 +29,9 @@ usage() {
   tadk logcat [选项]
 
 说明：
-  默认识别当前 Android 项目的 applicationId，
+  默认识别 project.conf 所指定模块的 applicationId，
   获取应用进程 PID，并只显示该应用的日志。
+  未配置项目时继续使用兼容的全项目扫描。
 
 选项：
   --package NAME     指定应用包名
@@ -69,6 +71,7 @@ HELP
 
 resolve_package_name() {
     local project_root=""
+    local config_status=0
 
     if [[ -n "$PACKAGE_NAME" ]]; then
         printf '%s\n' "$PACKAGE_NAME"
@@ -76,6 +79,21 @@ resolve_package_name() {
     fi
 
     project_root="$(tadk_require_project_root)"
+
+    if tadk_config_load "$project_root"; then
+        tadk_android_module_package_name \
+            "$project_root" \
+            "$TADK_CONFIG_MODULE"
+        return $?
+    else
+        config_status=$?
+    fi
+
+    if (( config_status != 1 )); then
+        tadk_error \
+            "无法加载项目配置，状态码：$config_status"
+        return "$config_status"
+    fi
 
     tadk_android_package_name "$project_root"
 }

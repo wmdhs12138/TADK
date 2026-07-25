@@ -7,6 +7,7 @@ TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/project.sh"
+source "$TADK_ROOT/lib/config.sh"
 source "$TADK_ROOT/lib/android.sh"
 source "$TADK_ROOT/lib/adb.sh"
 
@@ -29,8 +30,9 @@ usage() {
 
 包名解析顺序：
   1. 命令行指定的包名
-  2. 当前项目 build.gradle 中的 applicationId
-  3. 当前项目 build.gradle 中的 namespace
+  2. project.conf 指定模块的 applicationId
+  3. project.conf 指定模块的 namespace
+  4. 无配置时扫描当前项目的 applicationId 或 namespace
 
 示例：
   tadk launch
@@ -42,6 +44,7 @@ HELP
 
 resolve_package_name() {
     local project_root=""
+    local config_status=0
 
     if [[ -n "$PACKAGE_NAME" ]]; then
         printf '%s\n' "$PACKAGE_NAME"
@@ -49,6 +52,21 @@ resolve_package_name() {
     fi
 
     project_root="$(tadk_require_project_root)"
+
+    if tadk_config_load "$project_root"; then
+        tadk_android_module_package_name \
+            "$project_root" \
+            "$TADK_CONFIG_MODULE"
+        return $?
+    else
+        config_status=$?
+    fi
+
+    if (( config_status != 1 )); then
+        tadk_error \
+            "无法加载项目配置，状态码：$config_status"
+        return "$config_status"
+    fi
 
     tadk_android_package_name "$project_root"
 }
