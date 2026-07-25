@@ -12,6 +12,7 @@ source "$TADK_ROOT/lib/workflow.sh"
 
 BUILD_TYPE=""
 BUILD_TYPE_EXPLICIT=false
+DEVICE_SERIAL=""
 CLEAN_FIRST=false
 NO_CACHE=false
 RERUN_TASKS=false
@@ -53,6 +54,7 @@ usage() {
   --rerun             强制重新执行 Gradle 任务
 
 运行选项：
+  --device SERIAL     指定整条开发流程的 ADB 目标设备
   --no-clear          启动前不清空 Logcat
   --no-restart        不强制停止旧进程
   --no-logcat         启动应用后不读取日志
@@ -74,6 +76,7 @@ usage() {
 示例：
   tadk dev
   tadk dev --clean
+  tadk dev --device 172.19.0.1:39439
   tadk dev --no-logcat
   tadk dev --lines 200
   tadk dev --dump --format brief
@@ -112,6 +115,17 @@ while [[ $# -gt 0 ]]; do
 
         --rerun)
             RERUN_TASKS=true
+            ;;
+
+        --device)
+            shift
+            require_option_value "--device" "${1:-}"
+            DEVICE_SERIAL="$1"
+            ;;
+
+        --device=*)
+            DEVICE_SERIAL="${1#--device=}"
+            require_option_value "--device" "$DEVICE_SERIAL"
             ;;
 
         --no-clear)
@@ -218,11 +232,19 @@ tadk_logcat_validate_format "$LOGCAT_FORMAT" ||
 BUILD_ARGS=()
 INSTALL_ARGS=()
 LAUNCH_ARGS=()
+CLEAR_LOGCAT_ARGS=(--clear-only)
 LOGCAT_ARGS=(--format "$LOGCAT_FORMAT")
 
 if [[ "$BUILD_TYPE_EXPLICIT" == true ]]; then
     BUILD_ARGS+=("--$BUILD_TYPE")
     INSTALL_ARGS+=("--$BUILD_TYPE")
+fi
+
+if [[ -n "$DEVICE_SERIAL" ]]; then
+    INSTALL_ARGS+=(--device "$DEVICE_SERIAL")
+    LAUNCH_ARGS+=(--device "$DEVICE_SERIAL")
+    CLEAR_LOGCAT_ARGS+=(--device "$DEVICE_SERIAL")
+    LOGCAT_ARGS+=(--device "$DEVICE_SERIAL")
 fi
 
 if [[ "$CLEAN_FIRST" == true ]]; then
@@ -293,7 +315,7 @@ dev_step_clear_logcat() {
     printf '\n'
     tadk_heading "步骤 3/5：清空旧日志"
     printf '\n'
-    "$TADK_BIN" logcat --clear-only
+    "$TADK_BIN" logcat "${CLEAR_LOGCAT_ARGS[@]}"
 }
 
 dev_step_launch() {
@@ -343,6 +365,7 @@ else
     printf '构建类型：由项目配置或默认值决定\n'
 fi
 
+printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
 printf '构建前清理：%s\n' "$CLEAN_FIRST"
 printf '清空旧日志：%s\n' "$CLEAR_LOGCAT"
 printf '重新启动应用：%s\n' "$RESTART_APP"
