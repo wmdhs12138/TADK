@@ -3,11 +3,31 @@
 set -uo pipefail
 
 TADK_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK_ROOT="$HOME/.cache/tadk/tests/install-config.$$"
+CASE_INDEX=0
+CASE_ROOT=""
 
 source "$TADK_ROOT/tests/helpers/assertions.sh"
 
 PASSED=0
 FAILED=0
+
+cleanup() {
+    rm -rf "$WORK_ROOT"
+}
+
+trap cleanup EXIT HUP INT TERM
+
+rm -rf "$WORK_ROOT"
+mkdir -p "$WORK_ROOT"
+
+new_case_root() {
+    CASE_INDEX=$((CASE_INDEX + 1))
+    CASE_ROOT="$WORK_ROOT/case-$CASE_INDEX"
+
+    rm -rf "$CASE_ROOT"
+    mkdir -p "$CASE_ROOT"
+}
 
 run_case() {
     local name="$1"
@@ -15,7 +35,7 @@ run_case() {
 
     printf 'TEST %s\n' "$name"
 
-    if ( "$@" ); then
+    if "$@"; then
         PASSED=$((PASSED + 1))
         printf 'PASS %s\n\n' "$name"
     else
@@ -119,8 +139,8 @@ run_install() {
 case_config_selects_module_release_apk() {
     local root output calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_fake_adb "$root"
     create_project "$root"
@@ -146,8 +166,8 @@ case_config_selects_module_release_apk() {
 case_cli_debug_overrides_config_release() {
     local root calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_fake_adb "$root"
     create_project "$root"
@@ -171,8 +191,8 @@ case_cli_debug_overrides_config_release() {
 case_without_config_uses_legacy_resolution() {
     local root output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_fake_adb "$root"
     create_project "$root"
@@ -193,8 +213,8 @@ case_without_config_uses_legacy_resolution() {
 case_explicit_apk_bypasses_project_config() {
     local root explicit output calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_fake_adb "$root"
     create_project "$root"
@@ -217,8 +237,8 @@ case_explicit_apk_bypasses_project_config() {
 case_invalid_config_prevents_adb_execution() {
     local root output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_fake_adb "$root"
     create_project "$root"
@@ -238,8 +258,8 @@ case_invalid_config_prevents_adb_execution() {
 case_missing_configured_module_prevents_adb() {
     local root output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_fake_adb "$root"
     create_project "$root"
@@ -257,8 +277,8 @@ case_missing_configured_module_prevents_adb() {
 case_install_options_are_preserved() {
     local root calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_fake_adb "$root"
     create_project "$root"

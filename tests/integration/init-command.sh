@@ -3,11 +3,31 @@
 set -uo pipefail
 
 TADK_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK_ROOT="$HOME/.cache/tadk/tests/init-command.$$"
+CASE_INDEX=0
+CASE_ROOT=""
 
 source "$TADK_ROOT/tests/helpers/assertions.sh"
 
 PASSED=0
 FAILED=0
+
+cleanup() {
+    rm -rf "$WORK_ROOT"
+}
+
+trap cleanup EXIT HUP INT TERM
+
+rm -rf "$WORK_ROOT"
+mkdir -p "$WORK_ROOT"
+
+new_case_root() {
+    CASE_INDEX=$((CASE_INDEX + 1))
+    CASE_ROOT="$WORK_ROOT/case-$CASE_INDEX"
+
+    rm -rf "$CASE_ROOT"
+    mkdir -p "$CASE_ROOT"
+}
 
 run_case() {
     local name="$1"
@@ -15,7 +35,7 @@ run_case() {
 
     printf 'TEST %s\n' "$name"
 
-    if ( "$@" ); then
+    if "$@"; then
         PASSED=$((PASSED + 1))
         printf 'PASS %s\n\n' "$name"
     else
@@ -93,8 +113,8 @@ case_multiple_paths_return_64() {
 case_missing_path_returns_1() {
     local root missing output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     missing="$root/missing"
 
@@ -110,8 +130,8 @@ case_missing_path_returns_1() {
 case_non_project_directory_returns_1() {
     local root output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     output="$(
         "$TADK_ROOT/bin/tadk" init "$root" 2>&1
@@ -126,8 +146,8 @@ case_non_project_directory_returns_1() {
 case_explicit_project_root_creates_config() {
     local root output config status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root" app
 
@@ -154,8 +174,8 @@ case_explicit_project_root_creates_config() {
 case_nested_directory_resolves_project_root() {
     local root nested output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root" app
     nested="$root/app/src/main"
@@ -172,8 +192,8 @@ case_nested_directory_resolves_project_root() {
 case_current_directory_resolves_project_root() {
     local root nested output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root" mobile
     nested="$root/mobile/src/main"
@@ -194,8 +214,8 @@ case_current_directory_resolves_project_root() {
 case_existing_config_is_protected() {
     local root original output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root" app
 
@@ -218,8 +238,8 @@ case_existing_config_is_protected() {
 case_force_replaces_existing_config() {
     local root output config status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root" app
 
@@ -244,8 +264,8 @@ case_force_replaces_existing_config() {
 case_force_after_path_is_accepted() {
     local root status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root" app
 
