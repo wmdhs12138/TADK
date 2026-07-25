@@ -41,5 +41,6 @@ The unit suite verifies that:
 
 - `VERSION` contains a valid TADK version;
 - `bin/tadk --version` matches `VERSION`;
+- `release/manifest.json` matches `VERSION`;
 - README, release notes, changelog and verification documentation
   reference the current version.

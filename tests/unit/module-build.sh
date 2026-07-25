@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -uo pipefail
 
@@ -78,6 +78,16 @@ case_builds_release_module_task() {
 
     assert_success "$status"
     assert_equals ':mobile:assembleRelease' "$output"
+}
+
+case_builds_nested_module_task() {
+    local output status=0
+
+    output="$(tadk_build_module_task feature/chat debug)" ||
+        status=$?
+
+    assert_success "$status"
+    assert_equals ':feature:chat:assembleDebug' "$output"
 }
 
 case_rejects_invalid_module_task() {
@@ -240,6 +250,10 @@ run_case \
 run_case \
     'builds release module task' \
     case_builds_release_module_task
+
+run_case \
+    'builds nested module task' \
+    case_builds_nested_module_task
 
 run_case \
     'rejects invalid module task' \

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 if [[ -n "${TADK_RELEASE_SETUP_SH_LOADED:-}" ]]; then
     return 0
@@ -9,6 +9,10 @@ readonly TADK_RELEASE_SETUP_SH_LOADED=1
 readonly TADK_RELEASE_SETUP_IGNORE_BEGIN="# TADK Release signing"
 readonly TADK_RELEASE_SETUP_IGNORE_END="# End TADK Release signing"
 
+_TADK_RELEASE_SETUP_MODULE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$_TADK_RELEASE_SETUP_MODULE_DIR/module.sh"
+unset _TADK_RELEASE_SETUP_MODULE_DIR
+
 tadk_release_setup_validate_module() {
     if (( $# != 1 )); then
         return 64
@@ -16,8 +20,7 @@ tadk_release_setup_validate_module() {
 
     local module="$1"
 
-    [[ -n "$module" ]] || return 1
-    [[ "$module" =~ ^[A-Za-z0-9_.-]+$ ]]
+    tadk_module_validate "$module"
 }
 
 tadk_release_setup_resolve_module() {

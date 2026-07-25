@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -uo pipefail
 
@@ -56,7 +56,7 @@ plugins {
 BUILD
 
     cat > "$root/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -12,7 +12,7 @@ trap mock_env_destroy EXIT
 mock_env_create "$TADK_ROOT/tests/fixtures/android-project"
 
 cat > "$MOCK_BIN/termux-open" <<'MOCK_TERMUX_OPEN'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 set -Eeuo pipefail
 
 printf 'termux-open' >> "$MOCK_LOG"

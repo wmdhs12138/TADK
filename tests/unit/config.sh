@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -uo pipefail
 
@@ -92,6 +92,22 @@ case_accepts_comments_and_blank_lines() {
     assert_success "$status"
     assert_equals 'mobile' "$TADK_CONFIG_MODULE"
     assert_equals 'release' "$TADK_CONFIG_VARIANT"
+}
+
+case_accepts_nested_module() {
+    local root status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_config \
+        "$root" \
+        $'version=1\nmodule=feature/chat\nvariant=debug\n'
+
+    tadk_config_load "$root" || status=$?
+
+    assert_success "$status"
+    assert_equals 'feature/chat' "$TADK_CONFIG_MODULE"
 }
 
 case_rejects_shell_syntax_without_execution() {
@@ -279,7 +295,7 @@ case_failure_clears_previous_values() {
 
     create_config \
         "$invalid_root" \
-        $'version=1\nmodule=bad/module\nvariant=debug\n'
+        $'version=1\nmodule=../bad\nvariant=debug\n'
 
     tadk_config_load "$invalid_root" >/dev/null 2>&1 ||
         status=$?
@@ -305,6 +321,10 @@ run_case \
 run_case \
     'accepts comments and blank lines' \
     case_accepts_comments_and_blank_lines
+
+run_case \
+    'accepts nested module' \
+    case_accepts_nested_module
 
 run_case \
     'rejects shell syntax without execution' \

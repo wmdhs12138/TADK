@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 # TADK project initialization library.
 #
@@ -6,9 +6,9 @@
 # Do not enable set -e here because it would affect the caller.
 #
 # Public API:
-#   tadk_init_project PROJECT_ROOT FORCE
+#   tadk_init_project PROJECT_ROOT FORCE [MODULE]
 #   tadk_init_config_path PROJECT_ROOT
-#   tadk_init_detect_module PROJECT_ROOT
+#   tadk_init_detect_module PROJECT_ROOT [MODULE]
 #
 # Exit codes:
 #   0   project configuration created
@@ -22,6 +22,10 @@ fi
 readonly TADK_INIT_SH_LOADED=1
 readonly TADK_INIT_CONFIG_VERSION=1
 readonly TADK_INIT_DEFAULT_VARIANT=debug
+
+_TADK_INIT_MODULE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$_TADK_INIT_MODULE_DIR/module.sh"
+unset _TADK_INIT_MODULE_DIR
 
 _init_error() {
     if declare -F tadk_error >/dev/null 2>&1; then
@@ -70,26 +74,38 @@ _tadk_init_is_project_root() {
         [[ -f "$project_root/settings.gradle" ]]
 }
 
-_tadk_init_module_has_build_file() {
+_tadk_init_module_has_application_plugin() {
     if (( $# != 1 )); then
         return 64
     fi
 
     local module_dir="$1"
+    local build_file=""
 
-    [[ -f "$module_dir/build.gradle.kts" ]] ||
-        [[ -f "$module_dir/build.gradle" ]]
+    for build_file in \
+        "$module_dir/build.gradle.kts" \
+        "$module_dir/build.gradle"
+    do
+        [[ -f "$build_file" ]] || continue
+
+        grep -qE 'com\.android\.application|android\.application|androidApplication' "$build_file"
+        return $?
+    done
+
+    return 1
 }
 
 tadk_init_detect_module() {
-    if (( $# != 1 )); then
+    if (( $# < 1 || $# > 2 )); then
         _init_error \
-            'internal error: tadk_init_detect_module requires PROJECT_ROOT'
+            'usage: tadk_init_detect_module PROJECT_ROOT [MODULE]'
         return 64
     fi
 
     local project_root="$1"
-    local candidate
+    local requested_module="${2:-}"
+    local build_file
+    local module_dir
     local module_name
     local -a modules=()
 
@@ -98,23 +114,51 @@ tadk_init_detect_module() {
         return 64
     fi
 
-    if _tadk_init_module_has_build_file "$project_root/app"; then
+    if [[ -n "$requested_module" ]]; then
+        tadk_module_validate "$requested_module" || {
+            _init_error "invalid Android application module: $requested_module"
+            return 64
+        }
+
+        module_dir="$project_root/$requested_module"
+
+        _tadk_init_module_has_application_plugin "$module_dir" || {
+            _init_error \
+                "module is not an Android application module: $requested_module"
+            return 1
+        }
+
+        printf '%s\n' "$requested_module"
+        return 0
+    fi
+
+    if _tadk_init_module_has_application_plugin "$project_root/app"; then
         printf 'app\n'
         return 0
     fi
 
-    for candidate in "$project_root"/*; do
-        [[ -d "$candidate" ]] || continue
-        _tadk_init_module_has_build_file "$candidate" || continue
+    while IFS= read -r build_file; do
+        module_dir="$(dirname "$build_file")"
+        [[ "$module_dir" != "$project_root" ]] || continue
+        _tadk_init_module_has_application_plugin "$module_dir" || continue
 
-        module_name="${candidate#"$project_root"/}"
+        module_name="${module_dir#"$project_root"/}"
+        tadk_module_validate "$module_name" || continue
         modules+=("$module_name")
-    done
+    done < <(
+        find "$project_root" \
+            -type f \
+            \( -name 'build.gradle.kts' -o -name 'build.gradle' \) \
+            ! -path '*/build/*' \
+            ! -path '*/.gradle/*' \
+            -print 2>/dev/null |
+            sort
+    )
 
     case "${#modules[@]}" in
         0)
             _init_error \
-                'no direct Android module with a Gradle build file was found'
+                'no Android application module with a Gradle build file was found'
             return 1
             ;;
 
@@ -125,7 +169,7 @@ tadk_init_detect_module() {
 
         *)
             _init_error \
-                'multiple direct modules were found; automatic selection is ambiguous'
+            'multiple Android application modules were found; automatic selection is ambiguous'
             printf 'init: modules:' >&2
 
             for module_name in "${modules[@]}"; do
@@ -178,13 +222,14 @@ _tadk_init_write_config() {
 }
 
 tadk_init_project() {
-    if (( $# != 2 )); then
-        _init_error 'usage: tadk_init_project PROJECT_ROOT FORCE'
+    if (( $# < 2 || $# > 3 )); then
+        _init_error 'usage: tadk_init_project PROJECT_ROOT FORCE [MODULE]'
         return 64
     fi
 
     local project_root="$1"
     local force="$2"
+    local requested_module="${3:-}"
     local config_path
     local module
 
@@ -217,7 +262,11 @@ tadk_init_project() {
         return 1
     fi
 
-    module="$(tadk_init_detect_module "$project_root")" ||
+    module="$(
+        tadk_init_detect_module \
+            "$project_root" \
+            "$requested_module"
+    )" ||
         return $?
 
     _tadk_init_write_config \

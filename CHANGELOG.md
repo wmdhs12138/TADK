@@ -10,6 +10,13 @@
 - Added module-qualified Gradle build task generation.
 - Added module-scoped APK discovery and resolution.
 - Added environment diagnostics through `tadk doctor`.
+- Added ADB device inspection, wireless pairing and target-device
+  selection workflows.
+- Added Release APK verification, keystore management and signing setup
+  workflows.
+- Added explicit and nested Android module selection to `tadk init`.
+- Added Release bootstrap dry-run preflight and automatic rollback of managed
+  files after a failed later step.
 - Added unit and integration coverage for project initialization,
   configuration parsing, configured builds, installation and run
   workflows.

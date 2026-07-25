@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -uo pipefail
 
@@ -42,7 +42,7 @@ write_recording_command() {
     local command_name="$2"
 
     cat > "$path" <<EOF_COMMAND
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 

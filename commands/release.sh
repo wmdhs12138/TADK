@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -59,6 +59,7 @@ BOOTSTRAP_VALIDITY_DAYS="10000"
 BOOTSTRAP_STORE_TYPE="PKCS12"
 BOOTSTRAP_FORCE=false
 BOOTSTRAP_VERBOSE=false
+BOOTSTRAP_DRY_RUN=false
 BOOTSTRAP_KEY_ALGORITHM_SET=false
 BOOTSTRAP_KEY_SIZE_SET=false
 BOOTSTRAP_VALIDITY_DAYS_SET=false
@@ -179,6 +180,7 @@ bootstrap 选项：
   tadk release bootstrap --keystore release.jks --alias release \
     --dname "CN=My App, O=Personal, C=CA" \
     --storepass-env TADK_STOREPASS
+  --dry-run            只执行预检并显示将要写入的文件
 HELP
 }
 
@@ -900,6 +902,13 @@ case "$ACTION" in
                     BOOTSTRAP_FORCE=true
                     ;;
 
+                --dry-run)
+                    [[ "$BOOTSTRAP_DRY_RUN" == false ]] ||
+                        tadk_die "--dry-run 涓嶈兘閲嶅鎸囧畾" 64
+
+                    BOOTSTRAP_DRY_RUN=true
+                    ;;
+
                 --verbose)
                     [[ "$BOOTSTRAP_VERBOSE" == false ]] ||
                         tadk_die "--verbose 不能重复指定" 64
@@ -937,7 +946,8 @@ case "$ACTION" in
             "$BOOTSTRAP_STORE_TYPE" \
             "$BOOTSTRAP_FORCE" \
             "$BOOTSTRAP_VERBOSE" \
-            "$PROJECT_ROOT"
+            "$PROJECT_ROOT" \
+            "$BOOTSTRAP_DRY_RUN"
         ;;
 
     apply)

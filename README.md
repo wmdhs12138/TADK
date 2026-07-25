@@ -16,6 +16,8 @@ on ARM64 Android devices.
 - Package-filtered logcat support
 - Composed `tadk dev` development workflow
 - Workflow-based `tadk run` orchestration
+- ADB device inspection, wireless pairing and target-device selection
+- Release APK verification and signing setup workflows
 - Existing-project initialization with `.tadk/project.conf`
 - Configured module and variant support across build/install/run/dev
 - Environment diagnostics through `tadk doctor`
@@ -28,6 +30,11 @@ Current development version: `0.3.0-alpha.18`
 Alpha.18 adds persistent Android project configuration. TADK can now
 initialize existing projects and consistently apply the configured
 module and variant across build, install, run and development workflows.
+
+The development branch also includes ADB device workflows and the
+Release signing toolchain used to inspect, configure and verify Release
+APKs. The current hardening work adds explicit/nested module selection and
+recoverable Release bootstrap setup.
 
 This is an alpha release intended for development and testing in
 Termux on ARM64 Android devices.
@@ -53,6 +60,7 @@ Run one test group:
 Run this from an existing Android Gradle project:
 
     tadk init
+    tadk init --module feature/chat
 
 TADK creates:
 
@@ -63,6 +71,10 @@ Example:
     version=1
     module=app
     variant=debug
+
+Nested Android modules use a project-relative path such as
+`feature/chat`. TADK converts it to the corresponding Gradle project
+path when building.
 
 The configured module and variant are applied by:
 
@@ -80,6 +92,30 @@ Check whether Java, Android SDK, ARM64 build tools and TADK are
 configured correctly:
 
     tadk doctor
+
+## Devices and Release signing
+
+Inspect connected Android devices and their current state:
+
+    tadk devices
+
+Pair, connect or disconnect Android wireless debugging devices:
+
+    tadk connect --pair HOST:PAIR_PORT
+    tadk connect HOST:CONNECT_PORT
+
+Inspect the Release environment and verify a Release APK:
+
+    tadk release doctor
+    tadk release verify
+    tadk release build
+
+The complete signing setup workflow is available through
+`tadk release bootstrap`. Passwords are supplied through environment
+variables and are not written into command arguments. Use
+`tadk release bootstrap --dry-run` to inspect the targets first; a real
+bootstrap uses a temporary transaction snapshot and rolls managed files back
+if a later step fails.
 
 ## Build and run an application
 
@@ -147,6 +183,7 @@ TADK commands share reusable shell libraries:
 
     lib/common.sh    Common output, command and size helpers
     lib/project.sh   Android Gradle project discovery
+    lib/module.sh    Android module path validation and Gradle path mapping
     lib/apk.sh       APK artifact discovery
     lib/build.sh     Gradle build execution
     lib/adb.sh       ADB operations

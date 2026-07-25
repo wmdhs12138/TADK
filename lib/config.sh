@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 # TADK project configuration reader.
 #
@@ -25,6 +25,10 @@ fi
 
 readonly TADK_CONFIG_SH_LOADED=1
 readonly TADK_CONFIG_SUPPORTED_VERSION=1
+
+_TADK_CONFIG_MODULE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$_TADK_CONFIG_MODULE_DIR/module.sh"
+unset _TADK_CONFIG_MODULE_DIR
 
 TADK_CONFIG_VERSION=""
 TADK_CONFIG_MODULE=""
@@ -64,13 +68,7 @@ _config_validate_module() {
 
     local module="$1"
 
-    [[ -n "$module" ]] || return 1
-
-    case "$module" in
-        *[!A-Za-z0-9_.-]*)
-            return 1
-            ;;
-    esac
+    tadk_module_validate "$module"
 }
 
 _config_validate_variant() {

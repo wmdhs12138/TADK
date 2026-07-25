@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -uo pipefail
 
@@ -49,9 +49,22 @@ create_module() {
 
     mkdir -p "$root/$module"
 
-    cat > "$root/$module/build.gradle.kts" <<'BUILD'
+cat > "$root/$module/build.gradle.kts" <<'BUILD'
 plugins {
     id("com.android.application")
+}
+BUILD
+}
+
+create_library_module() {
+    local root="$1"
+    local module="$2"
+
+    mkdir -p "$root/$module"
+
+    cat > "$root/$module/build.gradle.kts" <<'BUILD'
+plugins {
+    id("com.android.library")
 }
 BUILD
 }
@@ -143,6 +156,64 @@ case_selects_only_direct_module() {
     assert_contains "$config" 'module=mobile'
 }
 
+case_selects_explicit_module() {
+    local root config status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_project_root "$root"
+    create_module "$root" app
+    create_module "$root" mobile
+
+    tadk_init_project "$root" false mobile >/dev/null 2>&1 ||
+        status=$?
+
+    assert_success "$status"
+
+    config="$(cat "$root/.tadk/project.conf")"
+
+    assert_contains "$config" 'module=mobile'
+}
+
+case_detects_nested_module() {
+    local root config status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_project_root "$root"
+    create_module "$root" feature/chat
+
+    tadk_init_project "$root" false >/dev/null 2>&1 ||
+        status=$?
+
+    assert_success "$status"
+
+    config="$(cat "$root/.tadk/project.conf")"
+
+    assert_contains "$config" 'module=feature/chat'
+}
+
+case_rejects_explicit_library_module() {
+    local root output status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_project_root "$root"
+    create_library_module "$root" common
+
+    output="$(
+        tadk_init_project "$root" false common 2>&1
+    )" || status=$?
+
+    assert_equals '1' "$status"
+    assert_contains "$output" \
+        'module is not an Android application module'
+    assert_file_not_exists "$root/.tadk/project.conf"
+}
+
 case_rejects_ambiguous_modules() {
     local root output status=0
 
@@ -232,6 +303,18 @@ run_case \
 run_case \
     'selects only direct module' \
     case_selects_only_direct_module
+
+run_case \
+    'selects explicit module' \
+    case_selects_explicit_module
+
+run_case \
+    'detects nested module' \
+    case_detects_nested_module
+
+run_case \
+    'rejects explicit library module' \
+    case_rejects_explicit_library_module
 
 run_case \
     'rejects ambiguous modules' \

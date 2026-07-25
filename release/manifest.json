@@ -1,9 +1,9 @@
 {
   "name": "TADK",
-  "version": "0.3.0-alpha.12",
+  "version": "0.3.0-alpha.18",
   "channel": "alpha",
-  "build": 12,
-  "release_date": "2026-07-24",
+  "build": 18,
+  "release_date": "2026-07-26",
   "shell": "bash",
-  "focus": "command integration test baseline"
+  "focus": "project configuration, device workflows and Release signing"
 }
