@@ -328,6 +328,7 @@ mkdir -p \
     "$MOCK_PROJECT/other/build/outputs/apk/release"
 
 cat > "$MOCK_PROJECT/.tadk/project.conf" <<'CONFIG'
+version=1
 module=app
 variant=debug
 CONFIG
@@ -335,9 +336,9 @@ CONFIG
 OTHER_APK="$MOCK_PROJECT/other/build/outputs/apk/release/other-release.apk"
 printf 'other signed apk fixture\n' > "$OTHER_APK"
 
-touch "$OTHER_APK"
-sleep 1
 touch "$RELEASE_APK"
+sleep 1
+touch "$OTHER_APK"
 
 : > "$MOCK_LOG"
 
