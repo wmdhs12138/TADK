@@ -1,5 +1,6 @@
 newapp|创建新的 Android Compose 项目|bin/newapp
 doctor|检查 Termux Android 开发环境|commands/doctor.sh
+devices|查看 ADB 设备和 Android 系统信息|commands/devices.sh
 init|初始化现有 Android 项目的 TADK 配置|commands/init.sh
 config|查看和验证 Android 项目的 TADK 配置|commands/config.sh
 build|构建当前 Android 项目的 APK|commands/build.sh
