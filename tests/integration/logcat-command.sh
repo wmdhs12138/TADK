@@ -83,6 +83,68 @@ assert_contains \
     "--launch 后应用应处于运行状态"
 
 mock_env_reset_log
+mock_env_start_package "$PACKAGE_NAME"
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --restart \
+        --clear \
+        --lines 5 \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "停止应用" \
+    "--restart 应说明正在停止应用"
+
+assert_contains \
+    "$output" \
+    "mock log" \
+    "--restart 后应输出应用日志"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "adb shell am force-stop $PACKAGE_NAME" \
+    "--restart 应强制停止应用"
+
+assert_contains \
+    "$calls" \
+    "adb logcat -c" \
+    "--restart --clear 应清空日志"
+
+assert_contains \
+    "$calls" \
+    "adb shell monkey -p $PACKAGE_NAME" \
+    "--restart 应重新启动应用"
+
+assert_order \
+    "$calls" \
+    "adb shell am force-stop $PACKAGE_NAME" \
+    "adb logcat -c" \
+    "停止应用应先于清空日志"
+
+assert_order \
+    "$calls" \
+    "adb logcat -c" \
+    "adb shell monkey -p $PACKAGE_NAME" \
+    "清空日志应先于重新启动"
+
+assert_order \
+    "$calls" \
+    "adb shell monkey -p $PACKAGE_NAME" \
+    "adb logcat --pid=12345" \
+    "重新启动应先于读取日志"
+
+assert_contains \
+    "$(cat "$MOCK_RUNNING_PACKAGES_FILE")" \
+    "$PACKAGE_NAME" \
+    "--restart 后应用应重新运行"
+
+mock_env_reset_log
 
 output="$(
     "$TADK_ROOT/bin/tadk" \
@@ -208,5 +270,71 @@ assert_contains \
     "$output" \
     "--launch 不能与 --clear-only 同时使用" \
     "应显示 launch 与 clear-only 冲突"
+
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --restart \
+        --all \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--restart 与 --all 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--restart 不能与 --all 同时使用" \
+    "应显示 restart 与 all 冲突"
+
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --restart \
+        --crash \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--restart 与 --crash 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--restart 不能与 --crash 同时使用" \
+    "应显示 restart 与 crash 冲突"
+
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --restart \
+        --clear-only \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--restart 与 --clear-only 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--restart 不能与 --clear-only 同时使用" \
+    "应显示 restart 与 clear-only 冲突"
 
 printf 'PASS: logcat command integration\n'
