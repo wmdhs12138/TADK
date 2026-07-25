@@ -856,4 +856,170 @@ assert_contains \
 
 printf 'PASS release setup refuses template overwrite\n\n'
 
+
+printf 'TEST release init writes protected signing properties\n'
+
+INIT_PROJECT="$TEST_ROOT/release-init"
+
+mkdir -p "$INIT_PROJECT/app"
+
+cat > "$INIT_PROJECT/gradlew" <<'GRADLEW'
+#!/data/data/com.termux/files/usr/bin/bash
+exit 0
+GRADLEW
+
+chmod +x "$INIT_PROJECT/gradlew"
+
+cat > "$INIT_PROJECT/settings.gradle.kts" <<'SETTINGS'
+include(":app")
+SETTINGS
+
+cat > "$INIT_PROJECT/app/build.gradle.kts" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+BUILD
+
+INIT_KEYSTORE="$INIT_PROJECT/release.jks"
+printf 'keystore fixture\n' > "$INIT_KEYSTORE"
+
+export INIT_STOREPASS='store-secret'
+export INIT_KEYPASS='key-secret'
+
+: > "$MOCK_LOG"
+
+output="$(
+    cd "$INIT_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        init \
+        --keystore "$INIT_KEYSTORE" \
+        --alias production \
+        --storepass-env INIT_STOREPASS \
+        --keypass-env INIT_KEYPASS \
+        2>&1
+)"
+
+INIT_PROPERTIES="$INIT_PROJECT/keystore.properties"
+
+[[ -f "$INIT_PROPERTIES" ]] ||
+    fail "release init 应创建 keystore.properties"
+
+assert_file_contains \
+    "$INIT_PROPERTIES" \
+    "storeFile=$INIT_KEYSTORE" \
+    "配置应保存绝对 keystore 路径"
+
+assert_file_contains \
+    "$INIT_PROPERTIES" \
+    "keyAlias=production" \
+    "配置应保存 alias"
+
+assert_file_contains \
+    "$INIT_PROPERTIES" \
+    "storePassword=$INIT_STOREPASS" \
+    "配置应保存 store 密码"
+
+assert_file_contains \
+    "$INIT_PROPERTIES" \
+    "keyPassword=$INIT_KEYPASS" \
+    "配置应保存 key 密码"
+
+permissions="$(stat -c '%a' "$INIT_PROPERTIES")"
+
+assert_equals \
+    "600" \
+    "$permissions" \
+    "keystore.properties 权限应为 600"
+
+if [[ "$output" == *"$INIT_STOREPASS"* ||
+      "$output" == *"$INIT_KEYPASS"* ]]; then
+    fail "release init 输出不得包含密码"
+fi
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "-storepass:env INIT_STOREPASS" \
+    "keytool 应通过环境变量读取 store 密码"
+
+assert_contains \
+    "$calls" \
+    "-keypass:env INIT_KEYPASS" \
+    "keytool 应通过环境变量读取 key 密码"
+
+if [[ "$calls" == *"$INIT_STOREPASS"* ||
+      "$calls" == *"$INIT_KEYPASS"* ]]; then
+    fail "keytool 参数不得包含密码值"
+fi
+
+printf 'PASS release init writes protected signing properties\n\n'
+
+printf 'TEST release init refuses overwrite\n'
+
+set +e
+output="$(
+    cd "$INIT_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        init \
+        --keystore "$INIT_KEYSTORE" \
+        --alias production \
+        --storepass-env INIT_STOREPASS \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "release init 默认不应覆盖已有配置"
+
+assert_contains \
+    "$output" \
+    "文件已存在，不会覆盖" \
+    "release init 应说明拒绝覆盖"
+
+printf 'PASS release init refuses overwrite\n\n'
+
+printf 'TEST release init validates without writing\n'
+
+VALIDATE_PROJECT="$TEST_ROOT/release-init-validate"
+
+mkdir -p "$VALIDATE_PROJECT/app"
+
+cp "$INIT_PROJECT/gradlew" "$VALIDATE_PROJECT/gradlew"
+cp "$INIT_PROJECT/settings.gradle.kts" \
+    "$VALIDATE_PROJECT/settings.gradle.kts"
+cp "$INIT_PROJECT/app/build.gradle.kts" \
+    "$VALIDATE_PROJECT/app/build.gradle.kts"
+
+chmod +x "$VALIDATE_PROJECT/gradlew"
+
+output="$(
+    cd "$VALIDATE_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        init \
+        --keystore "$INIT_KEYSTORE" \
+        --alias production \
+        --storepass-env INIT_STOREPASS \
+        --validate-only \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "校验成功" \
+    "validate-only 应报告成功"
+
+[[ ! -e "$VALIDATE_PROJECT/keystore.properties" ]] ||
+    fail "validate-only 不得创建 keystore.properties"
+
+printf 'PASS release init validates without writing\n\n'
+
 printf 'PASS: release command integration\n'
