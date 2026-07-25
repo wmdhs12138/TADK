@@ -20,12 +20,11 @@ on ARM64 Android devices.
 
 ## Project status
 
-Current development version: `0.3.0-alpha.16`
+Current development version: `0.3.0-alpha.17`
 
-Alpha.16 improves Workflow Engine reliability by explicitly preserving
-failure codes from before hooks, step bodies, after hooks and complete
-Workflow execution. It also adds reusable independent Bash process test
-support for regression coverage under `set -e`.
+Alpha.17 improves test reliability by automatically discovering unit
+and integration test scripts. It also centralizes shared discovery,
+execution and result-summary behavior in a reusable test-suite runner.
 
 This is an alpha release intended for development and testing in
 Termux on ARM64 Android devices.

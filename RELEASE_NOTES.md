@@ -1,85 +1,94 @@
-# TADK 0.3.0-alpha.16
+# TADK 0.3.0-alpha.17
 
-Alpha.16 strengthens Workflow Engine failure handling and improves the
-test infrastructure used to verify behavior under Bash `set -e`.
+Alpha.17 improves the reliability and maintainability of TADK's test
+infrastructure. Unit and integration suites now discover test scripts
+automatically and share one common suite runner.
 
 ## Highlights
 
-### Explicit Workflow failure propagation
+### Automatic unit test discovery
 
-Workflow execution now preserves the original failure status from:
+The unit runner now discovers all shell test files directly under:
 
-- before hooks;
-- the registered step function;
-- after hooks;
-- the first failed step in `workflow_run`.
+    tests/unit
 
-This prevents a later successful command from overwriting the real exit
-status.
+The runner:
 
-The execution rules are now explicit:
+- finds every `*.sh` file;
+- excludes its own `run.sh` entry point;
+- sorts test files for deterministic execution;
+- runs each test through Bash;
+- fails explicitly if no unit tests are found.
 
-- a failed before hook stops the step body;
-- a failed step body skips all after hooks;
-- a failed after hook stops remaining after hooks;
-- `workflow_run` stops at the first failed step;
-- the original nonzero status is returned to the caller.
+This prevents a newly added test file from being silently omitted from
+`tadk test unit`.
 
-### Errexit-safe regression coverage
+### Process helper suite registration
 
-Workflow failure propagation is tested inside independent Bash
-processes with `set -e` enabled.
+Before automatic discovery was introduced,
+`tests/unit/process.sh` existed but was missing from the fixed unit
+test list.
 
-The regression coverage verifies that:
+Alpha.17 first registers that suite explicitly, ensuring the reusable
+errexit process helper is covered by the unified test command.
 
-- before-hook status is preserved;
-- step-body status is preserved;
-- after-hook status is preserved;
-- later hooks do not run after failure;
-- later Workflow steps do not run after failure;
-- conditional skips remain safe under `set -e`.
+### Automatic integration test discovery
 
-### Reusable process test helper
+The integration runner now applies the same discovery rules under:
 
-Alpha.16 adds:
+    tests/integration
 
-    tests/helpers/process.sh
+New integration test scripts are automatically included in both:
 
-The `run_bash_errexit` helper:
+    tadk test integration
+    tadk test
 
-- launches an independent Bash process;
-- enables `set -e` inside that process;
-- passes arguments without relying on outer-function positional
-  parameters;
-- captures the child process status in `RUN_STATUS`;
-- avoids changing the caller's errexit state.
+The integration suite no longer depends on a manually maintained
+`TEST_FILES` array.
 
-Dedicated unit tests cover:
+### Shared test-suite runner
 
-- missing script validation;
-- successful execution;
-- original failure-code preservation;
-- real errexit termination;
-- argument forwarding;
-- safe use when the caller also enables `set -e`.
+Alpha.17 adds:
 
-### Test reliability fix
+    tests/helpers/suite.sh
 
-The first version of the Workflow errexit regression tests referenced
-`$2` inside test functions.
+The shared `run_test_suite` function centralizes:
 
-Inside a Bash function, positional parameters belong to that function,
-so the trace-file path became empty. Alpha.16 fixes this by capturing
-the subprocess argument in a named `trace_file` variable.
+- argument validation;
+- suite-directory validation;
+- test-file discovery;
+- runner exclusion;
+- deterministic sorting;
+- per-file execution;
+- pass and failure counting;
+- empty-suite failure;
+- final suite status reporting.
+
+The unit and integration `run.sh` files are now thin entry points that
+only define their suite directory and call the shared helper.
+
+### Stable execution behavior
+
+Discovered test files are invoked using:
+
+    bash "$test_file"
+
+This means suite execution does not depend on the executable bit of
+individual test scripts.
+
+The runner continues executing all discovered files, reports every
+failure, and returns a nonzero status when at least one test fails.
 
 ## Compatibility
 
 - No user-facing command was removed.
 - No existing option was renamed.
-- Conditional Workflow conditions still use nonzero status as a normal
-  skip.
-- Existing `tadk dev` and `tadk run` execution behavior remains
+- `tadk test unit` remains supported.
+- `tadk test integration` remains supported.
+- The complete `tadk test` command remains supported.
+- Existing output headings and pass/failure summaries remain
   compatible.
+- Smoke-test behavior is unchanged.
 - TADK remains designed for Termux on ARM64 Android devices.
 
 ## Verification
@@ -87,8 +96,10 @@ the subprocess argument in a named `trace_file` variable.
 Run:
 
     bin/tadk --version
+    bin/tadk test unit
+    bin/tadk test integration
     bin/tadk test
 
 Expected version:
 
-    TADK 0.3.0-alpha.16
+    TADK 0.3.0-alpha.17

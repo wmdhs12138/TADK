@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.3.0-alpha.17
+
+### Added
+
+- Added automatic discovery of unit test scripts under `tests/unit`.
+- Added automatic discovery of integration test scripts under
+  `tests/integration`.
+- Added the shared `tests/helpers/suite.sh` test-suite runner.
+
+### Changed
+
+- Unit and integration test files are now sorted before execution for
+  deterministic test order.
+- Unit and integration runners now invoke discovered scripts through
+  Bash instead of depending on executable permission bits.
+- Simplified the unit and integration entry-point runners by moving
+  shared discovery, execution and result-summary logic into
+  `run_test_suite`.
+- Updated release and verification documentation for Alpha.17.
+
+### Fixed
+
+- Registered `tests/unit/process.sh` in the unified unit suite before
+  replacing the manual list with automatic discovery.
+- Prevented newly added unit or integration test scripts from being
+  silently omitted by fixed `TEST_FILES` arrays.
+- Test suites now fail explicitly when no matching test files are
+  discovered.
+
+### Compatibility
+
+- No user-facing command or option was removed.
+- `tadk test unit`, `tadk test integration` and `tadk test` retain
+  their existing output structure and exit behavior.
+- Existing smoke-test behavior remains unchanged.
+
 ## 0.3.0-alpha.16
 
 ### Added
