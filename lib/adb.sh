@@ -6,12 +6,39 @@ fi
 
 readonly TADK_ADB_SH_LOADED=1
 
+TADK_ADB_SERIAL="${TADK_ADB_SERIAL:-}"
+
+tadk_adb_set_serial() {
+    if (( $# != 1 )); then
+        tadk_error             "内部错误：tadk_adb_set_serial 需要设备序列号"
+        return 64
+    fi
+
+    local serial="$1"
+
+    [[ -n "$serial" ]] || {
+        tadk_error "ADB 设备序列号不能为空"
+        return 64
+    }
+
+    TADK_ADB_SERIAL="$serial"
+    export TADK_ADB_SERIAL
+}
+
+tadk_adb() {
+    if [[ -n "$TADK_ADB_SERIAL" ]]; then
+        adb -s "$TADK_ADB_SERIAL" "$@"
+    else
+        adb "$@"
+    fi
+}
+
 tadk_adb_state() {
     if ! tadk_command_exists adb; then
         return 1
     fi
 
-    adb get-state 2>/dev/null
+    tadk_adb get-state 2>/dev/null
 }
 
 tadk_adb_require_command() {
@@ -44,7 +71,7 @@ tadk_adb_install_apk() {
     tadk_adb_require_device ||
         return 1
 
-    adb install "$@" "$apk_path"
+    tadk_adb install "$@" "$apk_path"
 }
 
 tadk_adb_install_replace() {
@@ -63,7 +90,7 @@ tadk_adb_package_installed() {
     tadk_adb_require_device ||
         return 1
 
-    adb shell pm list packages "$package_name" 2>/dev/null |
+    tadk_adb shell pm list packages "$package_name" 2>/dev/null |
         grep -Fxq "package:$package_name"
 }
 
@@ -81,7 +108,7 @@ tadk_adb_launch_package() {
         return 1
     fi
 
-    adb shell monkey \
+    tadk_adb shell monkey \
         -p "$package_name" \
         -c android.intent.category.LAUNCHER \
         1
@@ -96,7 +123,7 @@ tadk_adb_force_stop_package() {
     tadk_adb_require_device ||
         return 1
 
-    adb shell am force-stop "$package_name"
+    tadk_adb shell am force-stop "$package_name"
 }
 
 tadk_adb_package_pid() {
@@ -110,7 +137,7 @@ tadk_adb_package_pid() {
         return 1
 
     package_pid="$(
-        adb shell pidof "$package_name" 2>/dev/null |
+        tadk_adb shell pidof "$package_name" 2>/dev/null |
         tr -d '\r' |
         awk '{print $1}'
     )"
@@ -126,14 +153,14 @@ tadk_adb_clear_logcat() {
     tadk_adb_require_device ||
         return 1
 
-    adb logcat -c
+    tadk_adb logcat -c
 }
 
 tadk_adb_logcat_all() {
     tadk_adb_require_device ||
         return 1
 
-    adb logcat "$@"
+    tadk_adb logcat "$@"
 }
 
 tadk_adb_logcat_package() {
@@ -146,7 +173,7 @@ tadk_adb_logcat_package() {
         tadk_adb_package_pid "$package_name"
     )" || return 1
 
-    adb logcat \
+    tadk_adb logcat \
         --pid="$package_pid" \
         "$@"
 }
@@ -155,7 +182,7 @@ tadk_adb_logcat_crash() {
     tadk_adb_require_device ||
         return 1
 
-    adb logcat \
+    tadk_adb logcat \
         -b crash \
         "$@"
 }

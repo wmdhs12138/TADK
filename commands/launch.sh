@@ -12,6 +12,7 @@ source "$TADK_ROOT/lib/android.sh"
 source "$TADK_ROOT/lib/adb.sh"
 
 PACKAGE_NAME=""
+DEVICE_SERIAL=""
 RESTART=false
 
 usage() {
@@ -25,6 +26,7 @@ usage() {
 
 选项：
   --package NAME     指定应用包名
+  --device SERIAL    指定 ADB 目标设备
   --restart          启动前先强制停止应用
   -h, --help         显示帮助
 
@@ -38,6 +40,7 @@ usage() {
   tadk launch
   tadk launch com.example.app
   tadk launch --package com.example.app
+  tadk launch --device 172.19.0.1:39439
   tadk launch --restart
 HELP
 }
@@ -86,6 +89,22 @@ while [[ $# -gt 0 ]]; do
             PACKAGE_NAME="${1#--package=}"
             ;;
 
+        --device)
+            shift
+
+            [[ $# -gt 0 ]] ||
+                tadk_die "--device 缺少设备序列号"
+
+            DEVICE_SERIAL="$1"
+            ;;
+
+        --device=*)
+            DEVICE_SERIAL="${1#--device=}"
+
+            [[ -n "$DEVICE_SERIAL" ]] ||
+                tadk_die "--device 缺少设备序列号"
+            ;;
+
         --restart)
             RESTART=true
             ;;
@@ -111,6 +130,10 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+if [[ -n "$DEVICE_SERIAL" ]]; then
+    tadk_adb_set_serial "$DEVICE_SERIAL"
+fi
+
 RESOLVED_PACKAGE_NAME="$(
     resolve_package_name
 )" || tadk_die \
@@ -119,6 +142,7 @@ RESOLVED_PACKAGE_NAME="$(
 tadk_heading "TADK Launch"
 tadk_separator
 printf '应用包名：%s\n' "$RESOLVED_PACKAGE_NAME"
+printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
 printf '重新启动：%s\n' "$RESTART"
 tadk_separator
 printf '\n'
