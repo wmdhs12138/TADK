@@ -1,105 +1,200 @@
-# TADK 0.3.0-alpha.17
+# TADK 0.3.0-alpha.18
 
-Alpha.17 improves the reliability and maintainability of TADK's test
-infrastructure. Unit and integration suites now discover test scripts
-automatically and share one common suite runner.
+Alpha.18 introduces persistent Android project configuration and connects
+it to TADK's primary development workflows.
 
 ## Highlights
 
-### Automatic unit test discovery
+### Initialize an existing Android project
 
-The unit runner now discovers all shell test files directly under:
+TADK now provides:
 
-    tests/unit
+    tadk init
 
-The runner:
+The command validates the Android Gradle project and creates:
 
-- finds every `*.sh` file;
-- excludes its own `run.sh` entry point;
-- sorts test files for deterministic execution;
-- runs each test through Bash;
-- fails explicitly if no unit tests are found.
+    .tadk/project.conf
 
-This prevents a newly added test file from being silently omitted from
-`tadk test unit`.
+The generated configuration records the selected Android application
+module and default build variant:
 
-### Process helper suite registration
+    version=1
+    module=app
+    variant=debug
 
-Before automatic discovery was introduced,
-`tests/unit/process.sh` existed but was missing from the fixed unit
-test list.
+Existing configuration is protected from accidental replacement.
+Intentional regeneration is available through:
 
-Alpha.17 first registers that suite explicitly, ensuring the reusable
-errexit process helper is covered by the unified test command.
+    tadk init --force
 
-### Automatic integration test discovery
+### Safe project configuration reader
 
-The integration runner now applies the same discovery rules under:
+Alpha.18 adds a reusable configuration reader that:
 
-    tests/integration
+- locates `.tadk/project.conf` relative to the project root;
+- parses only supported keys;
+- rejects duplicate or unknown keys;
+- rejects malformed assignments;
+- validates the configuration version;
+- validates module and variant values;
+- distinguishes an absent configuration from invalid configuration;
+- avoids evaluating configuration as shell code.
 
-New integration test scripts are automatically included in both:
+The public configuration state includes:
 
-    tadk test integration
-    tadk test
+    TADK_CONFIG_VERSION
+    TADK_CONFIG_MODULE
+    TADK_CONFIG_VARIANT
 
-The integration suite no longer depends on a manually maintained
-`TEST_FILES` array.
+### Configured build workflow
 
-### Shared test-suite runner
+`tadk build` now uses the configured module and variant.
 
-Alpha.17 adds:
+Given:
 
-    tests/helpers/suite.sh
+    version=1
+    module=mobile
+    variant=release
 
-The shared `run_test_suite` function centralizes:
+TADK executes:
 
-- argument validation;
-- suite-directory validation;
-- test-file discovery;
-- runner exclusion;
-- deterministic sorting;
-- per-file execution;
-- pass and failure counting;
-- empty-suite failure;
-- final suite status reporting.
+    :mobile:assembleRelease
 
-The unit and integration `run.sh` files are now thin entry points that
-only define their suite directory and call the shared helper.
+The resulting APK is resolved only from:
 
-### Stable execution behavior
+    mobile/build/outputs/apk/release
 
-Discovered test files are invoked using:
+This prevents another Android module's APK from being selected.
 
-    bash "$test_file"
+### Configured installation
 
-This means suite execution does not depend on the executable bit of
-individual test scripts.
+`tadk install` now applies the same project configuration when no
+explicit APK path is supplied.
 
-The runner continues executing all discovered files, reports every
-failure, and returns a nonzero status when at least one test fails.
+The resolution precedence is:
 
-## Compatibility
+    explicit APK path
+        > configured module
+        > project-wide compatibility search
 
-- No user-facing command was removed.
-- No existing option was renamed.
-- `tadk test unit` remains supported.
-- `tadk test integration` remains supported.
-- The complete `tadk test` command remains supported.
-- Existing output headings and pass/failure summaries remain
-  compatible.
-- Smoke-test behavior is unchanged.
-- TADK remains designed for Termux on ARM64 Android devices.
+Variant precedence is:
+
+    --debug / --release
+        > configured variant
+        > default debug
+
+Explicit APK installation remains supported:
+
+    tadk install --apk ./path/to/application.apk
+
+### Configured run workflow
+
+`tadk run` now uses:
+
+- module-qualified Gradle tasks;
+- the configured build variant;
+- module-scoped APK resolution;
+- the existing Workflow Engine stages.
+
+Existing run modes remain available:
+
+    tadk run
+    tadk run --build-only
+    tadk run --install
+    tadk run --open
+
+### Development workflow inheritance
+
+`tadk dev` remains an orchestration command. It does not duplicate
+configuration parsing.
+
+Previously, `tadk dev` always forwarded `--debug`, which overrode a
+configured Release variant.
+
+Alpha.18 changes the forwarding rule:
+
+- without `--debug` or `--release`, no variant option is forwarded;
+- `tadk build` and `tadk install` read the project configuration;
+- an explicitly supplied variant is forwarded consistently to both
+  commands.
+
+For example:
+
+    tadk dev
+
+inherits the configured variant, while:
+
+    tadk dev --release
+
+explicitly selects Release.
+
+### Environment diagnostics
+
+Alpha.18 adds:
+
+    tadk doctor
+
+The command reports important Termux Android development prerequisites,
+including TADK, Java, Android SDK, Gradle Wrapper and project state.
+
+### Multi-module safety
+
+Configured workflows reject invalid or missing modules before invoking
+Gradle or ADB.
+
+APK discovery stays within the configured module, reducing the risk of:
+
+- building the wrong module;
+- installing an APK produced by another module;
+- reporting an unrelated artifact as the build result.
+
+### Backward compatibility
+
+Project initialization is optional.
+
+Projects without `.tadk/project.conf` continue using the existing
+project-wide behavior:
+
+    assembleDebug
+    assembleRelease
+
+No user-facing command or option was removed.
+
+Existing support remains for:
+
+- explicit Debug and Release selection;
+- explicit APK installation;
+- Gradle argument forwarding;
+- ADB argument forwarding;
+- clean builds;
+- cache disabling;
+- task reruns;
+- build-only, open-installer and ADB installation run modes.
 
 ## Verification
 
-Run:
+Run from the TADK repository root:
 
+    git diff --check
+    bash -n commands/init.sh
+    bash -n commands/build.sh
+    bash -n commands/install.sh
+    bash -n commands/run.sh
+    bash -n commands/dev.sh
     bin/tadk --version
     bin/tadk test unit
+    bin/tadk test smoke
     bin/tadk test integration
     bin/tadk test
 
 Expected version:
 
-    TADK 0.3.0-alpha.17
+    TADK 0.3.0-alpha.18
+
+The complete test suite should finish with no failed test groups.
+
+## Platform
+
+TADK remains designed for Termux on ARM64 Android devices.
+
+This is an alpha prerelease intended for development and testing.

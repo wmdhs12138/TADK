@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.3.0-alpha.18
+
+### Added
+
+- Added `tadk init` for generating `.tadk/project.conf` in an existing
+  Android Gradle project.
+- Added safe project configuration loading through `lib/config.sh`.
+- Added module-qualified Gradle build task generation.
+- Added module-scoped APK discovery and resolution.
+- Added environment diagnostics through `tadk doctor`.
+- Added unit and integration coverage for project initialization,
+  configuration parsing, configured builds, installation and run
+  workflows.
+
+### Changed
+
+- `tadk build` now uses the configured Android module and build variant.
+- `tadk install` now resolves APKs from the configured module.
+- `tadk run` now uses module-qualified Gradle tasks and module-scoped APK
+  resolution.
+- `tadk dev` now allows `build` and `install` to inherit the configured
+  variant when no command-line variant is supplied.
+- Explicit `--debug` and `--release` options continue to override the
+  configured variant.
+- Projects without `.tadk/project.conf` continue using the existing
+  project-wide compatibility behavior.
+
+### Fixed
+
+- Prevented multi-module projects from building or selecting an APK from
+  the wrong module when project configuration is present.
+- Prevented `tadk dev` from implicitly forcing Debug builds and
+  overriding `variant=release`.
+- Preserved configuration state outside command-substitution
+  subshells during installation.
+- Added explicit failure propagation to new integration assertions.
+- Kept test workspaces under `$HOME/.cache/tadk` for Termux
+  compatibility.
+
+### Configuration
+
+A generated project configuration has this format:
+
+    version=1
+    module=app
+    variant=debug
+
+Variant precedence is:
+
+    --debug / --release
+        > project.conf variant
+        > default debug
+
+### Compatibility
+
+- No user-facing command or option was removed.
+- Existing projects do not require immediate initialization.
+- Explicit APK installation remains supported.
+- Existing Gradle and ADB argument forwarding remains supported.
+- TADK remains designed for Termux on ARM64 Android devices.
+
 ## 0.3.0-alpha.17
 
 ### Added
