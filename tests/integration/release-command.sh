@@ -49,7 +49,25 @@ printf 'unsigned apk fixture\n' > "$UNSIGNED_APK"
 
 cat > "$MOCK_BIN/keytool" <<'MOCK_KEYTOOL'
 #!/data/data/com.termux/files/usr/bin/bash
-exit 0
+
+set -Eeuo pipefail
+
+printf 'keytool' >> "$MOCK_LOG"
+
+for argument in "$@"; do
+    printf ' %q' "$argument" >> "$MOCK_LOG"
+done
+
+printf '\n' >> "$MOCK_LOG"
+
+cat <<'KEYSTORE'
+Alias name: production
+Entry type: PrivateKeyEntry
+Owner: CN=TADK Release
+Issuer: CN=TADK Release
+Certificate fingerprints:
+         SHA256: TEST_KEYSTORE_CERTIFICATE_DIGEST
+KEYSTORE
 MOCK_KEYTOOL
 
 cat > "$MOCK_BIN/apksigner" <<'MOCK_APKSIGNER'
@@ -462,5 +480,172 @@ assert_contains \
     "应说明 build 参数不受支持"
 
 printf 'PASS release build rejects unsupported option\n\n'
+
+
+printf 'TEST release keystore inspects selected alias securely\n'
+
+KEYSTORE_FILE="$TEST_ROOT/release.jks"
+printf 'keystore fixture\n' > "$KEYSTORE_FILE"
+
+export TEST_STOREPASS='not-printed-secret'
+: > "$MOCK_LOG"
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keystore \
+        "$KEYSTORE_FILE" \
+        --alias production \
+        --storepass-env TEST_STOREPASS \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "TADK Release Keystore" \
+    "keystore 应显示检查标题"
+
+assert_contains \
+    "$output" \
+    "Alias name: production" \
+    "keystore 应显示选定条目的证书信息"
+
+assert_contains \
+    "$output" \
+    "TEST_KEYSTORE_CERTIFICATE_DIGEST" \
+    "keystore 应保留 keytool 证书摘要"
+
+assert_contains \
+    "$output" \
+    "SHA-256：TEST_APK_SHA256" \
+    "keystore 应显示文件摘要"
+
+if [[ "$output" == *"$TEST_STOREPASS"* ]]; then
+    fail "keystore 输出不得包含密码"
+fi
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "keytool -list -v -keystore $KEYSTORE_FILE -alias production -storepass:env TEST_STOREPASS" \
+    "keystore 应通过环境变量名称传递密码"
+
+if [[ "$calls" == *"$TEST_STOREPASS"* ]]; then
+    fail "keytool 参数不得包含密码值"
+fi
+
+printf 'PASS release keystore inspects selected alias securely\n\n'
+
+printf 'TEST release keystore rejects missing password environment\n'
+
+unset MISSING_STOREPASS || true
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keystore \
+        "$KEYSTORE_FILE" \
+        --storepass-env MISSING_STOREPASS \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "缺少密码环境变量时应失败"
+
+assert_contains \
+    "$output" \
+    "环境变量未设置：MISSING_STOREPASS" \
+    "应明确说明密码环境变量未设置"
+
+printf 'PASS release keystore rejects missing password environment\n\n'
+
+printf 'TEST release keystore rejects missing file\n'
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keystore \
+        "$TEST_ROOT/missing.jks" \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "不存在的 keystore 应失败"
+
+assert_contains \
+    "$output" \
+    "keystore 不存在" \
+    "应说明 keystore 文件不存在"
+
+printf 'PASS release keystore rejects missing file\n\n'
+
+
+printf 'TEST release keystore accepts single-character environment name\n'
+
+export P='single-character-secret'
+: > "$MOCK_LOG"
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keystore \
+        "$KEYSTORE_FILE" \
+        --storepass-env P \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "keystore 可访问" \
+    "单字符环境变量名称应合法"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "-storepass:env P" \
+    "应将单字符环境变量名称传给 keytool"
+
+if [[ "$output" == *"$P"* ]]; then
+    fail "输出不得包含单字符环境变量中的密码值"
+fi
+
+unset P
+
+printf 'PASS release keystore accepts single-character environment name\n\n'
+
+printf 'TEST release keystore rejects invalid environment name\n'
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keystore \
+        "$KEYSTORE_FILE" \
+        --storepass-env 'AB-CD' \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "包含连字符的环境变量名称应失败"
+
+assert_contains \
+    "$output" \
+    "无效的环境变量名称：AB-CD" \
+    "应明确拒绝非法环境变量名称"
+
+printf 'PASS release keystore rejects invalid environment name\n\n'
 
 printf 'PASS: release command integration\n'
