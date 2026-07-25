@@ -178,17 +178,23 @@ _doctor_check_adb() {
 _doctor_find_manifest() {
     local project_root="$1"
     local common_manifest="$project_root/app/src/main/AndroidManifest.xml"
+    local module_manifest
 
     if [[ -f "$common_manifest" ]]; then
         printf '%s\n' "$common_manifest"
         return
     fi
 
-    find "$project_root" \
-        -type f \
-        -path '*/src/main/AndroidManifest.xml' \
-        -print \
-        -quit 2>/dev/null
+    for module_manifest in \
+        "$project_root"/*/src/main/AndroidManifest.xml
+    do
+        if [[ -f "$module_manifest" ]]; then
+            printf '%s\n' "$module_manifest"
+            return
+        fi
+    done
+
+    return 1
 }
 
 _doctor_check_manifest() {
@@ -206,12 +212,24 @@ _doctor_check_manifest() {
 
 _doctor_find_apk_output() {
     local project_root="$1"
+    local common_output="$project_root/app/build/outputs/apk"
+    local module_output
 
-    find "$project_root" \
-        -type d \
-        -path '*/build/outputs/apk' \
-        -print \
-        -quit 2>/dev/null
+    if [[ -d "$common_output" ]]; then
+        printf '%s\n' "$common_output"
+        return
+    fi
+
+    for module_output in \
+        "$project_root"/*/build/outputs/apk
+    do
+        if [[ -d "$module_output" ]]; then
+            printf '%s\n' "$module_output"
+            return
+        fi
+    done
+
+    return 1
 }
 
 _doctor_check_apk_output() {

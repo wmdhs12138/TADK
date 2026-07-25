@@ -313,9 +313,60 @@ run_case \
     'missing ADB is a warning' \
     case_missing_adb_is_warning
 
+
+case_nested_example_project_is_ignored() {
+    local root output status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    mkdir -p \
+        "$root/templates/compose-app/app/src/main" \
+        "$root/templates/compose-app/app/build/outputs/apk" \
+        "$root/android-sdk"
+
+    cat > "$root/templates/compose-app/gradlew" <<'GRADLEW'
+#!/usr/bin/env bash
+exit 0
+GRADLEW
+
+    chmod +x "$root/templates/compose-app/gradlew"
+
+    cat > \
+        "$root/templates/compose-app/app/src/main/AndroidManifest.xml" \
+        <<'MANIFEST'
+<manifest package="com.example.template" />
+MANIFEST
+
+    mock_healthy_commands
+
+    export PREFIX='/data/data/com.termux/files/usr'
+    export ANDROID_HOME="$root/android-sdk"
+    unset ANDROID_SDK_ROOT
+
+    output="$(doctor_run "$root" 2>&1)" || status=$?
+
+    assert_equals '1' "$status"
+    assert_contains "$output" \
+        "FAIL  Gradle Wrapper does not exist: $root/gradlew"
+    assert_contains "$output" \
+        'WARN  No AndroidManifest.xml was found'
+    assert_contains "$output" \
+        'WARN  No APK output directory exists yet'
+    assert_not_contains "$output" \
+        "$root/templates/compose-app/app/src/main/AndroidManifest.xml"
+    assert_not_contains "$output" \
+        "$root/templates/compose-app/app/build/outputs/apk"
+}
+
 run_case \
     'ANDROID_SDK_ROOT fallback works' \
     case_android_sdk_root_fallback_works
+
+
+run_case \
+    'nested example project is ignored' \
+    case_nested_example_project_is_ignored
 
 printf '%s\nPassed: %s\nFailed: %s\n' \
     '----------------------------------------' \
