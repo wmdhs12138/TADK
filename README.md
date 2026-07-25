@@ -20,7 +20,7 @@ on ARM64 Android devices.
 
 ## Project status
 
-Current development version: `0.3.0-alpha.16`
+Current development version: `0.3.0-alpha.17`
 
 Alpha.16 improves Workflow Engine reliability by explicitly preserving
 failure codes from before hooks, step bodies, after hooks and complete
