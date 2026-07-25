@@ -13,6 +13,7 @@ source "$TADK_ROOT/lib/release_setup.sh"
 source "$TADK_ROOT/lib/release_init.sh"
 source "$TADK_ROOT/lib/release_keygen.sh"
 source "$TADK_ROOT/lib/release_apply.sh"
+source "$TADK_ROOT/lib/release_bootstrap.sh"
 
 ACTION=""
 APK_ARGUMENT=""
@@ -46,6 +47,22 @@ KEYGEN_STORE_TYPE_SET=false
 APPLY_MODULE=""
 APPLY_FORCE=false
 APPLY_CHECK_ONLY=false
+BOOTSTRAP_KEYSTORE=""
+BOOTSTRAP_ALIAS=""
+BOOTSTRAP_DNAME=""
+BOOTSTRAP_STOREPASS_ENV=""
+BOOTSTRAP_KEYPASS_ENV=""
+BOOTSTRAP_MODULE=""
+BOOTSTRAP_KEY_ALGORITHM="RSA"
+BOOTSTRAP_KEY_SIZE="4096"
+BOOTSTRAP_VALIDITY_DAYS="10000"
+BOOTSTRAP_STORE_TYPE="PKCS12"
+BOOTSTRAP_FORCE=false
+BOOTSTRAP_VERBOSE=false
+BOOTSTRAP_KEY_ALGORITHM_SET=false
+BOOTSTRAP_KEY_SIZE_SET=false
+BOOTSTRAP_VALIDITY_DAYS_SET=false
+BOOTSTRAP_STORE_TYPE_SET=false
 
 usage() {
     cat <<'HELP'
@@ -58,6 +75,7 @@ usage() {
   tadk release init [选项]
   tadk release keygen [选项]
   tadk release apply [选项]
+  tadk release bootstrap [选项]
 
 操作：
   doctor              检查 Android Release 签名验证环境
@@ -68,6 +86,7 @@ usage() {
   init                创建本地 keystore.properties
   keygen              创建 Android Release keystore
   apply               应用 Gradle Release 签名配置
+  bootstrap           初始化完整 Release 签名链路
 
 构建选项：
   --clean             构建前执行 Gradle clean
@@ -112,6 +131,20 @@ apply 选项：
   --check             只检查签名配置是否已应用
   --force             重新生成已有 TADK 签名配置块
 
+bootstrap 选项：
+  --keystore PATH     指定要创建的 keystore
+  --alias ALIAS       指定签名 alias
+  --dname NAME        指定证书 Distinguished Name
+  --storepass-env VAR 从环境变量读取 keystore 密码
+  --keypass-env VAR   从环境变量读取 key 密码
+  --module MODULE     指定 Android 应用模块
+  --keyalg ALG        密钥算法，当前支持 RSA，默认 RSA
+  --keysize SIZE      RSA 密钥长度，默认 4096
+  --validity DAYS     证书有效期天数，默认 10000
+  --storetype TYPE    keystore 类型：PKCS12 或 JKS
+  --force             覆盖 bootstrap 管理的已有文件
+  --verbose           显示 keytool 详细输出
+
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
   Release APK。如果存在 .tadk/project.conf，则只检查配置的 module。
@@ -143,6 +176,9 @@ apply 选项：
   tadk release apply
   tadk release apply --module app
   tadk release apply --check
+  tadk release bootstrap --keystore release.jks --alias release \
+    --dname "CN=My App, O=Personal, C=CA" \
+    --storepass-env TADK_STOREPASS
 HELP
 }
 
@@ -612,6 +648,296 @@ case "$ACTION" in
         )" || exit $?
 
         verify_apk_signature "$APK_PATH"
+        ;;
+
+    bootstrap)
+        while (( $# > 0 )); do
+            case "$1" in
+                --keystore)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--keystore 缺少参数" 64
+
+                    [[ -z "$BOOTSTRAP_KEYSTORE" ]] ||
+                        tadk_die "--keystore 不能重复指定" 64
+
+                    BOOTSTRAP_KEYSTORE="$1"
+                    ;;
+
+                --keystore=*)
+                    [[ -z "$BOOTSTRAP_KEYSTORE" ]] ||
+                        tadk_die "--keystore 不能重复指定" 64
+
+                    BOOTSTRAP_KEYSTORE="${1#--keystore=}"
+
+                    [[ -n "$BOOTSTRAP_KEYSTORE" ]] ||
+                        tadk_die "--keystore 缺少参数" 64
+                    ;;
+
+                --alias)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--alias 缺少参数" 64
+
+                    [[ -z "$BOOTSTRAP_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+
+                    BOOTSTRAP_ALIAS="$1"
+                    ;;
+
+                --alias=*)
+                    [[ -z "$BOOTSTRAP_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+
+                    BOOTSTRAP_ALIAS="${1#--alias=}"
+
+                    [[ -n "$BOOTSTRAP_ALIAS" ]] ||
+                        tadk_die "--alias 缺少参数" 64
+                    ;;
+
+                --dname)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--dname 缺少参数" 64
+
+                    [[ -z "$BOOTSTRAP_DNAME" ]] ||
+                        tadk_die "--dname 不能重复指定" 64
+
+                    BOOTSTRAP_DNAME="$1"
+                    ;;
+
+                --dname=*)
+                    [[ -z "$BOOTSTRAP_DNAME" ]] ||
+                        tadk_die "--dname 不能重复指定" 64
+
+                    BOOTSTRAP_DNAME="${1#--dname=}"
+
+                    [[ -n "$BOOTSTRAP_DNAME" ]] ||
+                        tadk_die "--dname 缺少参数" 64
+                    ;;
+
+                --storepass-env)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--storepass-env 缺少参数" 64
+
+                    [[ -z "$BOOTSTRAP_STOREPASS_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" \
+                            64
+
+                    BOOTSTRAP_STOREPASS_ENV="$1"
+                    ;;
+
+                --storepass-env=*)
+                    [[ -z "$BOOTSTRAP_STOREPASS_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" \
+                            64
+
+                    BOOTSTRAP_STOREPASS_ENV="${1#--storepass-env=}"
+
+                    [[ -n "$BOOTSTRAP_STOREPASS_ENV" ]] ||
+                        tadk_die "--storepass-env 缺少参数" 64
+                    ;;
+
+                --keypass-env)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--keypass-env 缺少参数" 64
+
+                    [[ -z "$BOOTSTRAP_KEYPASS_ENV" ]] ||
+                        tadk_die \
+                            "--keypass-env 不能重复指定" \
+                            64
+
+                    BOOTSTRAP_KEYPASS_ENV="$1"
+                    ;;
+
+                --keypass-env=*)
+                    [[ -z "$BOOTSTRAP_KEYPASS_ENV" ]] ||
+                        tadk_die \
+                            "--keypass-env 不能重复指定" \
+                            64
+
+                    BOOTSTRAP_KEYPASS_ENV="${1#--keypass-env=}"
+
+                    [[ -n "$BOOTSTRAP_KEYPASS_ENV" ]] ||
+                        tadk_die "--keypass-env 缺少参数" 64
+                    ;;
+
+                --module)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--module 缺少参数" 64
+
+                    [[ -z "$BOOTSTRAP_MODULE" ]] ||
+                        tadk_die "--module 不能重复指定" 64
+
+                    BOOTSTRAP_MODULE="$1"
+                    ;;
+
+                --module=*)
+                    [[ -z "$BOOTSTRAP_MODULE" ]] ||
+                        tadk_die "--module 不能重复指定" 64
+
+                    BOOTSTRAP_MODULE="${1#--module=}"
+
+                    [[ -n "$BOOTSTRAP_MODULE" ]] ||
+                        tadk_die "--module 缺少参数" 64
+                    ;;
+
+                --keyalg)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--keyalg 缺少参数" 64
+
+                    [[ "$BOOTSTRAP_KEY_ALGORITHM_SET" == false ]] ||
+                        tadk_die "--keyalg 不能重复指定" 64
+
+                    BOOTSTRAP_KEY_ALGORITHM="$1"
+                    BOOTSTRAP_KEY_ALGORITHM_SET=true
+                    ;;
+
+                --keyalg=*)
+                    [[ "$BOOTSTRAP_KEY_ALGORITHM_SET" == false ]] ||
+                        tadk_die "--keyalg 不能重复指定" 64
+
+                    BOOTSTRAP_KEY_ALGORITHM="${1#--keyalg=}"
+
+                    [[ -n "$BOOTSTRAP_KEY_ALGORITHM" ]] ||
+                        tadk_die "--keyalg 缺少参数" 64
+
+                    BOOTSTRAP_KEY_ALGORITHM_SET=true
+                    ;;
+
+                --keysize)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--keysize 缺少参数" 64
+
+                    [[ "$BOOTSTRAP_KEY_SIZE_SET" == false ]] ||
+                        tadk_die "--keysize 不能重复指定" 64
+
+                    BOOTSTRAP_KEY_SIZE="$1"
+                    BOOTSTRAP_KEY_SIZE_SET=true
+                    ;;
+
+                --keysize=*)
+                    [[ "$BOOTSTRAP_KEY_SIZE_SET" == false ]] ||
+                        tadk_die "--keysize 不能重复指定" 64
+
+                    BOOTSTRAP_KEY_SIZE="${1#--keysize=}"
+
+                    [[ -n "$BOOTSTRAP_KEY_SIZE" ]] ||
+                        tadk_die "--keysize 缺少参数" 64
+
+                    BOOTSTRAP_KEY_SIZE_SET=true
+                    ;;
+
+                --validity)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--validity 缺少参数" 64
+
+                    [[ "$BOOTSTRAP_VALIDITY_DAYS_SET" == false ]] ||
+                        tadk_die "--validity 不能重复指定" 64
+
+                    BOOTSTRAP_VALIDITY_DAYS="$1"
+                    BOOTSTRAP_VALIDITY_DAYS_SET=true
+                    ;;
+
+                --validity=*)
+                    [[ "$BOOTSTRAP_VALIDITY_DAYS_SET" == false ]] ||
+                        tadk_die "--validity 不能重复指定" 64
+
+                    BOOTSTRAP_VALIDITY_DAYS="${1#--validity=}"
+
+                    [[ -n "$BOOTSTRAP_VALIDITY_DAYS" ]] ||
+                        tadk_die "--validity 缺少参数" 64
+
+                    BOOTSTRAP_VALIDITY_DAYS_SET=true
+                    ;;
+
+                --storetype)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--storetype 缺少参数" 64
+
+                    [[ "$BOOTSTRAP_STORE_TYPE_SET" == false ]] ||
+                        tadk_die "--storetype 不能重复指定" 64
+
+                    BOOTSTRAP_STORE_TYPE="$1"
+                    BOOTSTRAP_STORE_TYPE_SET=true
+                    ;;
+
+                --storetype=*)
+                    [[ "$BOOTSTRAP_STORE_TYPE_SET" == false ]] ||
+                        tadk_die "--storetype 不能重复指定" 64
+
+                    BOOTSTRAP_STORE_TYPE="${1#--storetype=}"
+
+                    [[ -n "$BOOTSTRAP_STORE_TYPE" ]] ||
+                        tadk_die "--storetype 缺少参数" 64
+
+                    BOOTSTRAP_STORE_TYPE_SET=true
+                    ;;
+
+                --force)
+                    [[ "$BOOTSTRAP_FORCE" == false ]] ||
+                        tadk_die "--force 不能重复指定" 64
+
+                    BOOTSTRAP_FORCE=true
+                    ;;
+
+                --verbose)
+                    [[ "$BOOTSTRAP_VERBOSE" == false ]] ||
+                        tadk_die "--verbose 不能重复指定" 64
+
+                    BOOTSTRAP_VERBOSE=true
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                *)
+                    tadk_die \
+                        "bootstrap 不支持参数：$1" \
+                        64
+                    ;;
+            esac
+
+            shift
+        done
+
+        PROJECT_ROOT="$(tadk_require_project_root)"
+
+        tadk_release_bootstrap_execute \
+            "$BOOTSTRAP_KEYSTORE" \
+            "$BOOTSTRAP_ALIAS" \
+            "$BOOTSTRAP_DNAME" \
+            "$BOOTSTRAP_STOREPASS_ENV" \
+            "$BOOTSTRAP_KEYPASS_ENV" \
+            "$BOOTSTRAP_MODULE" \
+            "$BOOTSTRAP_KEY_ALGORITHM" \
+            "$BOOTSTRAP_KEY_SIZE" \
+            "$BOOTSTRAP_VALIDITY_DAYS" \
+            "$BOOTSTRAP_STORE_TYPE" \
+            "$BOOTSTRAP_FORCE" \
+            "$BOOTSTRAP_VERBOSE" \
+            "$PROJECT_ROOT"
         ;;
 
     apply)
