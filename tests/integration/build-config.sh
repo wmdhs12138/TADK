@@ -3,11 +3,31 @@
 set -uo pipefail
 
 TADK_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK_ROOT="$HOME/.cache/tadk/tests/build-config.$$"
+CASE_INDEX=0
+CASE_ROOT=""
 
 source "$TADK_ROOT/tests/helpers/assertions.sh"
 
 PASSED=0
 FAILED=0
+
+cleanup() {
+    rm -rf "$WORK_ROOT"
+}
+
+trap cleanup EXIT HUP INT TERM
+
+rm -rf "$WORK_ROOT"
+mkdir -p "$WORK_ROOT"
+
+new_case_root() {
+    CASE_INDEX=$((CASE_INDEX + 1))
+    CASE_ROOT="$WORK_ROOT/case-$CASE_INDEX"
+
+    rm -rf "$CASE_ROOT"
+    mkdir -p "$CASE_ROOT"
+}
 
 run_case() {
     local name="$1"
@@ -15,7 +35,7 @@ run_case() {
 
     printf 'TEST %s\n' "$name"
 
-    if ( "$@" ); then
+    if "$@"; then
         PASSED=$((PASSED + 1))
         printf 'PASS %s\n\n' "$name"
     else
@@ -128,8 +148,8 @@ run_build() {
 case_without_config_uses_legacy_debug() {
     local root output calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
 
@@ -155,8 +175,8 @@ case_without_config_uses_legacy_debug() {
 case_config_uses_module_and_variant() {
     local root output calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
     write_config "$root" mobile release
@@ -181,8 +201,8 @@ case_config_uses_module_and_variant() {
 case_cli_debug_overrides_config_variant() {
     local root output calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
     write_config "$root" mobile release
@@ -206,8 +226,8 @@ case_cli_debug_overrides_config_variant() {
 case_cli_release_overrides_debug_config() {
     local root calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
     write_config "$root" app debug
@@ -227,8 +247,8 @@ case_cli_release_overrides_debug_config() {
 case_gradle_arguments_are_preserved() {
     local root calls status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
     write_config "$root" app debug
@@ -256,8 +276,8 @@ case_gradle_arguments_are_preserved() {
 case_invalid_config_prevents_gradle_execution() {
     local root output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
 
@@ -283,8 +303,8 @@ CONFIG
 case_missing_configured_module_prevents_build() {
     local root output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
     write_config "$root" missing debug
@@ -301,8 +321,8 @@ case_missing_configured_module_prevents_build() {
 case_module_apk_resolution_ignores_other_module() {
     local root output status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_project "$root"
     write_config "$root" app debug

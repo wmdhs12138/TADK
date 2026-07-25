@@ -3,6 +3,9 @@
 set -uo pipefail
 
 TADK_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK_ROOT="$HOME/.cache/tadk/tests/module-build.$$"
+CASE_INDEX=0
+CASE_ROOT=""
 
 source "$TADK_ROOT/tests/helpers/assertions.sh"
 source "$TADK_ROOT/lib/common.sh"
@@ -12,13 +15,30 @@ source "$TADK_ROOT/lib/build.sh"
 PASSED=0
 FAILED=0
 
+cleanup() {
+    rm -rf "$WORK_ROOT"
+}
+
+trap cleanup EXIT HUP INT TERM
+
+rm -rf "$WORK_ROOT"
+mkdir -p "$WORK_ROOT"
+
+new_case_root() {
+    CASE_INDEX=$((CASE_INDEX + 1))
+    CASE_ROOT="$WORK_ROOT/case-$CASE_INDEX"
+
+    rm -rf "$CASE_ROOT"
+    mkdir -p "$CASE_ROOT"
+}
+
 run_case() {
     local name="$1"
     shift
 
     printf 'TEST %s\n' "$name"
 
-    if ( "$@" ); then
+    if "$@"; then
         PASSED=$((PASSED + 1))
         printf 'PASS %s\n\n' "$name"
     else
@@ -83,8 +103,8 @@ case_rejects_invalid_build_type() {
 case_finds_apk_only_in_requested_module() {
     local root selected status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_apk "$root" app debug app-debug.apk
     create_apk "$root" demo debug demo-debug.apk
@@ -108,8 +128,8 @@ case_finds_apk_only_in_requested_module() {
 case_finds_requested_release_apk() {
     local root selected status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_apk "$root" app debug app-debug.apk
     create_apk "$root" app release app-release.apk
@@ -130,8 +150,8 @@ case_finds_requested_release_apk() {
 case_ignores_android_test_and_unaligned_apks() {
     local root selected status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_apk "$root" app debug app-debug.apk
     create_apk "$root" app debug app-debug-androidTest.apk
@@ -158,8 +178,8 @@ case_ignores_android_test_and_unaligned_apks() {
 case_missing_module_returns_failure() {
     local root status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     mkdir -p "$root"
 
@@ -176,8 +196,8 @@ case_missing_module_returns_failure() {
 case_missing_apk_returns_failure() {
     local root status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     mkdir -p "$root/app"
 
@@ -194,8 +214,8 @@ case_missing_apk_returns_failure() {
 case_resolve_module_rejects_other_module_path() {
     local root requested status=0
 
-    root="$(mktemp -d)"
-    trap 'rm -rf "$root"' RETURN
+    new_case_root
+    root="$CASE_ROOT"
 
     create_apk "$root" app debug app-debug.apk
     create_apk "$root" demo debug demo-debug.apk
