@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 assert_equals() {
     local expected="$1" actual="$2" message="${3:-值不相等}"

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -13,7 +13,7 @@ mock_env_create \
     "$TADK_ROOT/tests/fixtures/android-project"
 
 cat > "$MOCK_BIN/adb" <<'MOCK_ADB'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -176,7 +176,7 @@ assert_contains \
     "应查询当前前台应用"
 
 cat > "$MOCK_BIN/adb" <<'MOCK_EMPTY_ADB'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -74,7 +74,7 @@ mock_env_start_package() {
 
 mock_env_create_adb() {
     cat > "$MOCK_BIN/adb" <<'MOCK_ADB'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 set -Eeuo pipefail
 printf 'adb' >> "$MOCK_LOG"
 for argument in "$@"; do printf ' %q' "$argument" >> "$MOCK_LOG"; done
@@ -145,7 +145,7 @@ MOCK_ADB
 
 mock_env_create_gradlew() {
     cat > "$MOCK_PROJECT/gradlew" <<'MOCK_GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 set -Eeuo pipefail
 printf './gradlew' >> "$MOCK_LOG"
 for argument in "$@"; do printf ' %q' "$argument" >> "$MOCK_LOG"; done

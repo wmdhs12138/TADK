@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -uo pipefail
 
@@ -50,7 +50,7 @@ create_fake_adb() {
     mkdir -p "$root/fake-bin"
 
     cat > "$root/fake-bin/adb" <<'ADB'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -90,7 +90,7 @@ include(":mobile")
 SETTINGS
 
     cat > "$root/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 exit 0
 GRADLEW
 

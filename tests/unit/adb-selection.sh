@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -18,7 +18,7 @@ mkdir -p "$MOCK_BIN"
 : > "$MOCK_LOG"
 
 cat > "$MOCK_BIN/adb" <<'MOCK_ADB'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 

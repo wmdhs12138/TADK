@@ -1,4 +1,4 @@
-newapp|创建新的 Android Compose 项目|bin/newapp
+#!/usr/bin/env bash
 doctor|检查 Termux Android 开发环境|commands/doctor.sh
 devices|查看 ADB 设备和 Android 系统信息|commands/devices.sh
 connect|配对、连接和断开 Android 无线调试设备|commands/connect.sh

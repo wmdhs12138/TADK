@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 if [[ -n "${TADK_BUILD_SH_LOADED:-}" ]]; then
     return 0

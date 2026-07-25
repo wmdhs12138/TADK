@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -181,7 +181,7 @@ bootstrap 选项：
     --dname "CN=My App, O=Personal, C=CA" \
     --storepass-env TADK_STOREPASS
   --dry-run            只执行预检并显示将要写入的文件
-  HELP
+HELP
 }
 
 print_check() {

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -21,7 +21,7 @@ mkdir -p \
 : > "$MOCK_LOG"
 
 cat > "$MOCK_PROJECT/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -48,7 +48,7 @@ printf 'signed apk fixture\n' > "$RELEASE_APK"
 printf 'unsigned apk fixture\n' > "$UNSIGNED_APK"
 
 cat > "$MOCK_BIN/keytool" <<'MOCK_KEYTOOL'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -97,7 +97,7 @@ KEYSTORE
 MOCK_KEYTOOL
 
 cat > "$MOCK_BIN/apksigner" <<'MOCK_APKSIGNER'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -126,7 +126,7 @@ VERIFY
 MOCK_APKSIGNER
 
 cat > "$MOCK_BIN/sha256sum" <<'MOCK_SHA256SUM'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 printf 'TEST_APK_SHA256  %s\n' "$1"
 MOCK_SHA256SUM
@@ -723,7 +723,7 @@ mkdir -p \
     "$SETUP_KOTLIN/.tadk"
 
 cat > "$SETUP_KOTLIN/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 exit 0
 GRADLEW
 
@@ -824,7 +824,7 @@ SETUP_GROOVY="$TEST_ROOT/setup-groovy"
 mkdir -p "$SETUP_GROOVY/mobile"
 
 cat > "$SETUP_GROOVY/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 exit 0
 GRADLEW
 
@@ -900,7 +900,7 @@ INIT_PROJECT="$TEST_ROOT/release-init"
 mkdir -p "$INIT_PROJECT/app"
 
 cat > "$INIT_PROJECT/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 exit 0
 GRADLEW
 
@@ -1407,7 +1407,7 @@ APPLY_KOTLIN_BUILD="$APPLY_KOTLIN_PROJECT/app/build.gradle.kts"
 mkdir -p "$APPLY_KOTLIN_PROJECT/app"
 
 cat > "$APPLY_KOTLIN_PROJECT/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 exit 0
 GRADLEW
 
@@ -1601,7 +1601,7 @@ APPLY_GROOVY_BUILD="$APPLY_GROOVY_PROJECT/mobile/build.gradle"
 mkdir -p "$APPLY_GROOVY_PROJECT/mobile"
 
 cat > "$APPLY_GROOVY_PROJECT/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 exit 0
 GRADLEW
 
@@ -1853,7 +1853,7 @@ BOOTSTRAP_KEYSTORE="$BOOTSTRAP_PROJECT/production.p12"
 mkdir -p "$BOOTSTRAP_PROJECT/app"
 
 cat > "$BOOTSTRAP_PROJECT/gradlew" <<'GRADLEW'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 exit 0
 GRADLEW
 

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
@@ -23,7 +23,7 @@ List of devices attached
 DEVICES
 
 cat > "$MOCK_BIN/adb" <<'MOCK_ADB'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 set -Eeuo pipefail
 
