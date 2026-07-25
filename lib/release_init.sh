@@ -105,16 +105,15 @@ tadk_release_init_resolve_keystore() {
 }
 
 tadk_release_init_validate_keystore() {
-    if (( $# != 4 )); then
+    if (( $# != 3 )); then
         tadk_error \
-            "内部错误：keystore 校验需要路径、alias 和两个环境变量"
+            "内部错误：keystore 校验需要路径、alias 和密码环境变量"
         return 64
     fi
 
     local keystore_path="$1"
     local alias_name="$2"
     local storepass_environment="$3"
-    local keypass_environment="$4"
 
     local keytool_args=(
         -list
@@ -122,12 +121,7 @@ tadk_release_init_validate_keystore() {
         -alias "$alias_name"
         -storepass:env "$storepass_environment"
     )
-
-    if [[ -n "$keypass_environment" ]]; then
-        keytool_args+=(
-            -keypass:env "$keypass_environment"
-        )
-    fi
+    local status=0
 
     tadk_require_command \
         keytool \
@@ -137,10 +131,10 @@ tadk_release_init_validate_keystore() {
         return 0
     fi
 
-    local status=$?
+    status=$?
 
     tadk_error \
-        "keystore 或 alias 校验失败：$alias_name"
+        "keystore 密码错误、alias 不存在或 keystore 无法读取：$alias_name"
 
     return "$status"
 }
@@ -291,8 +285,7 @@ tadk_release_init_execute() {
     tadk_release_init_validate_keystore \
         "$keystore_path" \
         "$alias_name" \
-        "$storepass_environment" \
-        "$keypass_environment" ||
+        "$storepass_environment" ||
         return $?
 
     tadk_heading "TADK Release Init"
@@ -304,7 +297,10 @@ tadk_release_init_execute() {
     tadk_separator
 
     if [[ "$validate_only" == true ]]; then
-        tadk_success "keystore、alias 和密码校验成功"
+        tadk_success "keystore 密码和 alias 校验成功"
+        if [[ -n "$keypass_environment" ]]; then
+            tadk_info "key 密码已读取，但未由 keytool -list 验证"
+        fi
         return 0
     fi
 

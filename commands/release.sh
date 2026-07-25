@@ -64,8 +64,11 @@ init 选项：
   --alias ALIAS       指定签名 alias
   --storepass-env VAR 从环境变量读取 keystore 密码
   --keypass-env VAR   从环境变量读取 key 密码
-  --validate-only     只校验，不写入配置
+  --validate-only     只校验 keystore 密码和 alias，不写入配置
   --force             覆盖已有 keystore.properties
+
+  init 可校验 keystore 密码和 alias。key 密码会安全读取并写入
+  本地配置，但 keytool -list 无法验证独立的 key 密码。
 
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的

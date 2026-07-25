@@ -945,10 +945,9 @@ assert_contains \
     "-storepass:env INIT_STOREPASS" \
     "keytool 应通过环境变量读取 store 密码"
 
-assert_contains \
-    "$calls" \
-    "-keypass:env INIT_KEYPASS" \
-    "keytool 应通过环境变量读取 key 密码"
+if [[ "$calls" == *"-keypass"* ]]; then
+    fail "keytool -list 不得接收不支持的 -keypass 参数"
+fi
 
 if [[ "$calls" == *"$INIT_STOREPASS"* ||
       "$calls" == *"$INIT_KEYPASS"* ]]; then
@@ -1014,8 +1013,8 @@ output="$(
 
 assert_contains \
     "$output" \
-    "校验成功" \
-    "validate-only 应报告成功"
+    "keystore 密码和 alias 校验成功" \
+    "validate-only 应报告实际完成的校验"
 
 [[ ! -e "$VALIDATE_PROJECT/keystore.properties" ]] ||
     fail "validate-only 不得创建 keystore.properties"
