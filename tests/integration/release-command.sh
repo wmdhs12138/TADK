@@ -52,6 +52,10 @@ cat > "$MOCK_BIN/keytool" <<'MOCK_KEYTOOL'
 
 set -Eeuo pipefail
 
+if [[ "${MOCK_KEYTOOL_FAIL:-false}" == true ]]; then
+    exit 23
+fi
+
 printf 'keytool' >> "$MOCK_LOG"
 
 for argument in "$@"; do
@@ -1020,5 +1024,54 @@ assert_contains \
     fail "validate-only 不得创建 keystore.properties"
 
 printf 'PASS release init validates without writing\n\n'
+
+
+printf 'TEST release init preserves keytool failure status\n'
+
+FAIL_PROJECT="$TEST_ROOT/release-init-keytool-failure"
+
+mkdir -p "$FAIL_PROJECT/app"
+
+cp "$INIT_PROJECT/gradlew" "$FAIL_PROJECT/gradlew"
+cp "$INIT_PROJECT/settings.gradle.kts" \
+    "$FAIL_PROJECT/settings.gradle.kts"
+cp "$INIT_PROJECT/app/build.gradle.kts" \
+    "$FAIL_PROJECT/app/build.gradle.kts"
+
+chmod +x "$FAIL_PROJECT/gradlew"
+
+export MOCK_KEYTOOL_FAIL=true
+
+set +e
+output="$(
+    cd "$FAIL_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        init \
+        --keystore "$INIT_KEYSTORE" \
+        --alias production \
+        --storepass-env INIT_STOREPASS \
+        2>&1
+)"
+command_status=$?
+set -e
+
+unset MOCK_KEYTOOL_FAIL
+
+assert_equals \
+    "23" \
+    "$command_status" \
+    "release init 应保留 keytool 失败状态"
+
+assert_contains \
+    "$output" \
+    "keystore 密码错误、alias 不存在或 keystore 无法读取" \
+    "release init 应报告 keystore 校验失败"
+
+[[ ! -e "$FAIL_PROJECT/keystore.properties" ]] ||
+    fail "keytool 校验失败后不得写入签名配置"
+
+printf 'PASS release init preserves keytool failure status\n\n'
 
 printf 'PASS: release command integration\n'

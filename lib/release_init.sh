@@ -129,9 +129,9 @@ tadk_release_init_validate_keystore() {
 
     if keytool "${keytool_args[@]}" >/dev/null; then
         return 0
+    else
+        status=$?
     fi
-
-    status=$?
 
     tadk_error \
         "keystore 密码错误、alias 不存在或 keystore 无法读取：$alias_name"
