@@ -1843,4 +1843,500 @@ assert_contains \
 
 printf 'PASS release apply check fails before configuration\n\n'
 
+
+printf 'TEST release bootstrap completes signing initialization\n'
+
+BOOTSTRAP_PROJECT="$TEST_ROOT/release-bootstrap"
+BOOTSTRAP_BUILD="$BOOTSTRAP_PROJECT/app/build.gradle.kts"
+BOOTSTRAP_KEYSTORE="$BOOTSTRAP_PROJECT/production.p12"
+
+mkdir -p "$BOOTSTRAP_PROJECT/app"
+
+cat > "$BOOTSTRAP_PROJECT/gradlew" <<'GRADLEW'
+#!/data/data/com.termux/files/usr/bin/bash
+exit 0
+GRADLEW
+
+cat > "$BOOTSTRAP_PROJECT/settings.gradle.kts" <<'SETTINGS'
+rootProject.name = "BootstrapFixture"
+include(":app")
+SETTINGS
+
+cat > "$BOOTSTRAP_BUILD" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "com.example.bootstrap"
+    compileSdk = 36
+}
+BUILD
+
+chmod +x "$BOOTSTRAP_PROJECT/gradlew"
+
+export BOOTSTRAP_STOREPASS='bootstrap-secret-123'
+export BOOTSTRAP_KEYPASS='bootstrap-secret-123'
+
+: > "$MOCK_LOG"
+
+output="$(
+    cd "$BOOTSTRAP_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        bootstrap \
+        --keystore "$BOOTSTRAP_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Bootstrap, O=TADK, C=CA" \
+        --storepass-env BOOTSTRAP_STOREPASS \
+        --keypass-env BOOTSTRAP_KEYPASS \
+        --module app \
+        --keysize 3072 \
+        --validity 3650 \
+        --storetype PKCS12 \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "Bootstrap：生成 keystore" \
+    "bootstrap 应执行 keygen 步骤"
+
+assert_contains \
+    "$output" \
+    "Bootstrap：生成签名配置骨架" \
+    "bootstrap 应执行 setup 步骤"
+
+assert_contains \
+    "$output" \
+    "Bootstrap：创建本地签名配置" \
+    "bootstrap 应执行 init 步骤"
+
+assert_contains \
+    "$output" \
+    "Bootstrap：应用 Gradle 签名配置" \
+    "bootstrap 应执行 apply 步骤"
+
+assert_contains \
+    "$output" \
+    "Release 签名初始化已完成" \
+    "bootstrap 应报告完整初始化成功"
+
+if [[ "$output" == *"$BOOTSTRAP_STOREPASS"* ||
+      "$output" == *"$BOOTSTRAP_KEYPASS"* ]]; then
+    fail "bootstrap 输出不得泄漏密码值"
+fi
+
+[[ -f "$BOOTSTRAP_KEYSTORE" ]] ||
+    fail "bootstrap 应生成 keystore"
+
+permissions="$(stat -c '%a' "$BOOTSTRAP_KEYSTORE")"
+
+assert_equals \
+    "600" \
+    "$permissions" \
+    "bootstrap 生成的 keystore 权限应为 600"
+
+[[ -f "$BOOTSTRAP_PROJECT/keystore.properties.example" ]] ||
+    fail "bootstrap 应生成 keystore.properties.example"
+
+[[ -f "$BOOTSTRAP_PROJECT/.tadk/release-signing-snippet.gradle.kts" ]] ||
+    fail "bootstrap 应生成 Kotlin DSL 签名片段"
+
+[[ -f "$BOOTSTRAP_PROJECT/keystore.properties" ]] ||
+    fail "bootstrap 应生成 keystore.properties"
+
+permissions="$(
+    stat -c '%a' \
+        "$BOOTSTRAP_PROJECT/keystore.properties"
+)"
+
+assert_equals \
+    "600" \
+    "$permissions" \
+    "bootstrap 生成的 keystore.properties 权限应为 600"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/keystore.properties" \
+    "storeFile=$BOOTSTRAP_KEYSTORE" \
+    "本地配置应引用生成的 keystore"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/keystore.properties" \
+    "keyAlias=production" \
+    "本地配置应写入 alias"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/keystore.properties" \
+    "storePassword=$BOOTSTRAP_STOREPASS" \
+    "本地配置应写入 store 密码"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/keystore.properties" \
+    "keyPassword=$BOOTSTRAP_KEYPASS" \
+    "本地配置应写入 key 密码"
+
+assert_file_contains \
+    "$BOOTSTRAP_BUILD" \
+    "// TADK Release signing begin" \
+    "bootstrap 应应用 Gradle 签名配置"
+
+assert_file_contains \
+    "$BOOTSTRAP_BUILD" \
+    'signingConfigs.getByName("release")' \
+    "bootstrap 应配置 release build type"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/.gitignore" \
+    "/keystore.properties" \
+    "bootstrap 应忽略本地签名配置"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/.gitignore" \
+    "/production.p12" \
+    "bootstrap 应忽略项目内生成的 keystore"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "keytool -genkeypair" \
+    "bootstrap 应先调用 keytool 生成 keystore"
+
+assert_contains \
+    "$calls" \
+    "-storepass:env BOOTSTRAP_STOREPASS" \
+    "bootstrap 应通过环境变量传递 store 密码"
+
+assert_contains \
+    "$calls" \
+    "-keypass:env BOOTSTRAP_KEYPASS" \
+    "bootstrap 应通过环境变量传递 key 密码"
+
+if [[ "$calls" == *"$BOOTSTRAP_STOREPASS"* ||
+      "$calls" == *"$BOOTSTRAP_KEYPASS"* ]]; then
+    fail "bootstrap 的 keytool 参数不得泄漏密码值"
+fi
+
+keygen_line="$(
+    grep -nF \
+        "Bootstrap：生成 keystore" \
+        <<< "$output" |
+        head -n 1 |
+        cut -d: -f1
+)"
+
+setup_line="$(
+    grep -nF \
+        "Bootstrap：生成签名配置骨架" \
+        <<< "$output" |
+        head -n 1 |
+        cut -d: -f1
+)"
+
+init_line="$(
+    grep -nF \
+        "Bootstrap：创建本地签名配置" \
+        <<< "$output" |
+        head -n 1 |
+        cut -d: -f1
+)"
+
+apply_line="$(
+    grep -nF \
+        "Bootstrap：应用 Gradle 签名配置" \
+        <<< "$output" |
+        head -n 1 |
+        cut -d: -f1
+)"
+
+(( keygen_line < setup_line )) ||
+    fail "bootstrap 应先执行 keygen 再执行 setup"
+
+(( setup_line < init_line )) ||
+    fail "bootstrap 应先执行 setup 再执行 init"
+
+(( init_line < apply_line )) ||
+    fail "bootstrap 应先执行 init 再执行 apply"
+
+printf 'PASS release bootstrap completes signing initialization\n\n'
+
+printf 'TEST release bootstrap stops on first failed step\n'
+
+BOOTSTRAP_STOP_PROJECT="$TEST_ROOT/release-bootstrap-stop"
+BOOTSTRAP_STOP_KEYSTORE="$BOOTSTRAP_STOP_PROJECT/existing.p12"
+
+mkdir -p "$BOOTSTRAP_STOP_PROJECT/app"
+
+cp "$BOOTSTRAP_PROJECT/gradlew" \
+    "$BOOTSTRAP_STOP_PROJECT/gradlew"
+
+cp "$BOOTSTRAP_PROJECT/settings.gradle.kts" \
+    "$BOOTSTRAP_STOP_PROJECT/settings.gradle.kts"
+
+cat > "$BOOTSTRAP_STOP_PROJECT/app/build.gradle.kts" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "com.example.bootstrap.stop"
+}
+BUILD
+
+printf 'valuable existing keystore\n' \
+    > "$BOOTSTRAP_STOP_KEYSTORE"
+
+chmod +x "$BOOTSTRAP_STOP_PROJECT/gradlew"
+
+set +e
+output="$(
+    cd "$BOOTSTRAP_STOP_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        bootstrap \
+        --keystore "$BOOTSTRAP_STOP_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Bootstrap Stop, O=TADK, C=CA" \
+        --storepass-env BOOTSTRAP_STOREPASS \
+        --module app \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "已有 keystore 时 bootstrap 默认应失败"
+
+assert_contains \
+    "$output" \
+    "keystore 已存在，不会覆盖" \
+    "bootstrap 应保留 keygen 的失败原因"
+
+assert_contains \
+    "$output" \
+    "Bootstrap 在步骤“生成 keystore”停止" \
+    "bootstrap 应说明停止步骤"
+
+assert_file_contains \
+    "$BOOTSTRAP_STOP_KEYSTORE" \
+    "valuable existing keystore" \
+    "失败时不得破坏已有 keystore"
+
+[[ ! -e "$BOOTSTRAP_STOP_PROJECT/keystore.properties.example" ]] ||
+    fail "keygen 失败后不得继续执行 setup"
+
+[[ ! -e "$BOOTSTRAP_STOP_PROJECT/keystore.properties" ]] ||
+    fail "keygen 失败后不得继续执行 init"
+
+if grep -Fq \
+    "// TADK Release signing begin" \
+    "$BOOTSTRAP_STOP_PROJECT/app/build.gradle.kts"; then
+    fail "keygen 失败后不得继续执行 apply"
+fi
+
+printf 'PASS release bootstrap stops on first failed step\n\n'
+
+printf 'TEST release bootstrap force refreshes managed outputs\n'
+
+printf 'stale keystore\n' > "$BOOTSTRAP_KEYSTORE"
+printf 'stale example\n' \
+    > "$BOOTSTRAP_PROJECT/keystore.properties.example"
+printf 'stale properties\n' \
+    > "$BOOTSTRAP_PROJECT/keystore.properties"
+
+python - "$BOOTSTRAP_BUILD" <<'PY_EDIT'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace(
+    "val tadkReleaseKeystoreFile =",
+    "// stale bootstrap block\nval tadkReleaseKeystoreFile =",
+    1,
+)
+path.write_text(text)
+PY_EDIT
+
+output="$(
+    cd "$BOOTSTRAP_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        bootstrap \
+        --keystore "$BOOTSTRAP_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Bootstrap, O=TADK, C=CA" \
+        --storepass-env BOOTSTRAP_STOREPASS \
+        --keypass-env BOOTSTRAP_KEYPASS \
+        --module app \
+        --force \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "覆盖已有文件：true" \
+    "bootstrap --force 应报告覆盖模式"
+
+assert_file_contains \
+    "$BOOTSTRAP_KEYSTORE" \
+    "mock keystore" \
+    "bootstrap --force 应替换已有 keystore"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/keystore.properties.example" \
+    "storeFile=release.jks" \
+    "bootstrap --force 应刷新配置模板"
+
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/keystore.properties" \
+    "keyAlias=production" \
+    "bootstrap --force 应刷新本地配置"
+
+if grep -Fq \
+    "stale bootstrap block" \
+    "$BOOTSTRAP_BUILD"; then
+    fail "bootstrap --force 应刷新 TADK Gradle 配置块"
+fi
+
+begin_count="$(
+    grep -Fxc \
+        "// TADK Release signing begin" \
+        "$BOOTSTRAP_BUILD"
+)"
+
+end_count="$(
+    grep -Fxc \
+        "// TADK Release signing end" \
+        "$BOOTSTRAP_BUILD"
+)"
+
+assert_equals \
+    "1" \
+    "$begin_count" \
+    "bootstrap --force 后只能存在一个开始标记"
+
+assert_equals \
+    "1" \
+    "$end_count" \
+    "bootstrap --force 后只能存在一个结束标记"
+
+printf 'PASS release bootstrap force refreshes managed outputs\n\n'
+
+printf 'TEST release bootstrap rejects separate PKCS12 key password\n'
+
+BOOTSTRAP_MISMATCH_PROJECT="$TEST_ROOT/release-bootstrap-mismatch"
+BOOTSTRAP_MISMATCH_KEYSTORE="$BOOTSTRAP_MISMATCH_PROJECT/mismatch.p12"
+
+mkdir -p "$BOOTSTRAP_MISMATCH_PROJECT/app"
+
+cp "$BOOTSTRAP_PROJECT/gradlew" \
+    "$BOOTSTRAP_MISMATCH_PROJECT/gradlew"
+
+cp "$BOOTSTRAP_PROJECT/settings.gradle.kts" \
+    "$BOOTSTRAP_MISMATCH_PROJECT/settings.gradle.kts"
+
+cat > "$BOOTSTRAP_MISMATCH_PROJECT/app/build.gradle.kts" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "com.example.bootstrap.mismatch"
+}
+BUILD
+
+chmod +x "$BOOTSTRAP_MISMATCH_PROJECT/gradlew"
+
+export BOOTSTRAP_DIFFERENT_KEYPASS='different-bootstrap-secret'
+
+: > "$MOCK_LOG"
+
+set +e
+output="$(
+    cd "$BOOTSTRAP_MISMATCH_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        bootstrap \
+        --keystore "$BOOTSTRAP_MISMATCH_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Bootstrap Mismatch, O=TADK, C=CA" \
+        --storepass-env BOOTSTRAP_STOREPASS \
+        --keypass-env BOOTSTRAP_DIFFERENT_KEYPASS \
+        --module app \
+        --storetype PKCS12 \
+        2>&1
+)"
+command_status=$?
+set -e
+
+unset BOOTSTRAP_DIFFERENT_KEYPASS
+
+assert_equals \
+    "64" \
+    "$command_status" \
+    "PKCS12 密码不一致时 bootstrap 应返回用法错误"
+
+assert_contains \
+    "$output" \
+    "PKCS12 不支持独立的 key 密码" \
+    "bootstrap 应保留 PKCS12 密码兼容性错误"
+
+assert_contains \
+    "$output" \
+    "Bootstrap 在步骤“生成 keystore”停止" \
+    "PKCS12 校验失败时应停止在 keygen"
+
+[[ ! -e "$BOOTSTRAP_MISMATCH_KEYSTORE" ]] ||
+    fail "PKCS12 密码不一致时不得生成 keystore"
+
+[[ ! -e "$BOOTSTRAP_MISMATCH_PROJECT/keystore.properties.example" ]] ||
+    fail "PKCS12 校验失败后不得执行 setup"
+
+calls="$(cat "$MOCK_LOG")"
+
+if [[ "$calls" == *"keytool"* ]]; then
+    fail "PKCS12 密码不一致时 bootstrap 不应调用 keytool"
+fi
+
+printf 'PASS release bootstrap rejects separate PKCS12 key password\n\n'
+
+printf 'TEST release bootstrap validates required arguments\n'
+
+set +e
+output="$(
+    cd "$BOOTSTRAP_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        bootstrap \
+        --alias production \
+        --dname "CN=TADK Bootstrap, O=TADK, C=CA" \
+        --storepass-env BOOTSTRAP_STOREPASS \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_equals \
+    "64" \
+    "$command_status" \
+    "bootstrap 缺少 keystore 时应返回用法错误"
+
+assert_contains \
+    "$output" \
+    "bootstrap 缺少 --keystore" \
+    "bootstrap 应说明缺少 keystore"
+
+printf 'PASS release bootstrap validates required arguments\n\n'
+
+unset BOOTSTRAP_STOREPASS
+unset BOOTSTRAP_KEYPASS
+
 printf 'PASS: release command integration\n'
