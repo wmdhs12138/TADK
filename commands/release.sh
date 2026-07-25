@@ -11,6 +11,7 @@ source "$TADK_ROOT/lib/config.sh"
 source "$TADK_ROOT/lib/apk.sh"
 source "$TADK_ROOT/lib/release_setup.sh"
 source "$TADK_ROOT/lib/release_init.sh"
+source "$TADK_ROOT/lib/release_keygen.sh"
 
 ACTION=""
 APK_ARGUMENT=""
@@ -26,6 +27,21 @@ INIT_STOREPASS_ENV=""
 INIT_KEYPASS_ENV=""
 INIT_FORCE=false
 INIT_VALIDATE_ONLY=false
+KEYGEN_KEYSTORE=""
+KEYGEN_ALIAS=""
+KEYGEN_DNAME=""
+KEYGEN_STOREPASS_ENV=""
+KEYGEN_KEYPASS_ENV=""
+KEYGEN_KEY_ALGORITHM="RSA"
+KEYGEN_KEY_SIZE="4096"
+KEYGEN_VALIDITY_DAYS="10000"
+KEYGEN_STORE_TYPE="PKCS12"
+KEYGEN_FORCE=false
+KEYGEN_VERBOSE=false
+KEYGEN_KEY_ALGORITHM_SET=false
+KEYGEN_KEY_SIZE_SET=false
+KEYGEN_VALIDITY_DAYS_SET=false
+KEYGEN_STORE_TYPE_SET=false
 
 usage() {
     cat <<'HELP'
@@ -36,6 +52,7 @@ usage() {
   tadk release keystore KEYSTORE [选项]
   tadk release setup [选项]
   tadk release init [选项]
+  tadk release keygen [选项]
 
 操作：
   doctor              检查 Android Release 签名验证环境
@@ -44,6 +61,7 @@ usage() {
   keystore            检查 keystore 内容和签名证书
   setup               生成安全的 Release 签名配置骨架
   init                创建本地 keystore.properties
+  keygen              创建 Android Release keystore
 
 构建选项：
   --clean             构建前执行 Gradle clean
@@ -69,6 +87,19 @@ init 选项：
 
   init 可校验 keystore 密码和 alias。key 密码会安全读取并写入
   本地配置，但 keytool -list 无法验证独立的 key 密码。
+
+keygen 选项：
+  --keystore PATH     指定要创建的 keystore
+  --alias ALIAS       指定签名 alias
+  --dname NAME        指定证书 Distinguished Name
+  --storepass-env VAR 从环境变量读取 keystore 密码
+  --keypass-env VAR   从环境变量读取 key 密码
+  --keyalg ALG        密钥算法，当前支持 RSA，默认 RSA
+  --keysize SIZE      RSA 密钥长度，默认 4096
+  --validity DAYS     证书有效期天数，默认 10000
+  --storetype TYPE    keystore 类型：PKCS12 或 JKS
+  --force             安全替换已有 keystore
+  --verbose           显示 keytool 详细输出
 
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
@@ -96,6 +127,9 @@ init 选项：
   tadk release setup
   tadk release setup --module app
   tadk release init --keystore release.jks --alias release \
+    --storepass-env TADK_STOREPASS
+  tadk release keygen --keystore release.jks --alias release \
+    --dname "CN=My App, O=Personal, C=CA" \
     --storepass-env TADK_STOREPASS
 HELP
 }
@@ -566,6 +600,213 @@ case "$ACTION" in
         )" || exit $?
 
         verify_apk_signature "$APK_PATH"
+        ;;
+
+    keygen)
+        while (( $# > 0 )); do
+            case "$1" in
+                --keystore)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--keystore 缺少参数" 64
+                    [[ -z "$KEYGEN_KEYSTORE" ]] ||
+                        tadk_die "--keystore 不能重复指定" 64
+                    KEYGEN_KEYSTORE="$1"
+                    ;;
+
+                --keystore=*)
+                    [[ -z "$KEYGEN_KEYSTORE" ]] ||
+                        tadk_die "--keystore 不能重复指定" 64
+                    KEYGEN_KEYSTORE="${1#--keystore=}"
+                    [[ -n "$KEYGEN_KEYSTORE" ]] ||
+                        tadk_die "--keystore 缺少参数" 64
+                    ;;
+
+                --alias)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--alias 缺少参数" 64
+                    [[ -z "$KEYGEN_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+                    KEYGEN_ALIAS="$1"
+                    ;;
+
+                --alias=*)
+                    [[ -z "$KEYGEN_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+                    KEYGEN_ALIAS="${1#--alias=}"
+                    [[ -n "$KEYGEN_ALIAS" ]] ||
+                        tadk_die "--alias 缺少参数" 64
+                    ;;
+
+                --dname)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--dname 缺少参数" 64
+                    [[ -z "$KEYGEN_DNAME" ]] ||
+                        tadk_die "--dname 不能重复指定" 64
+                    KEYGEN_DNAME="$1"
+                    ;;
+
+                --dname=*)
+                    [[ -z "$KEYGEN_DNAME" ]] ||
+                        tadk_die "--dname 不能重复指定" 64
+                    KEYGEN_DNAME="${1#--dname=}"
+                    [[ -n "$KEYGEN_DNAME" ]] ||
+                        tadk_die "--dname 缺少参数" 64
+                    ;;
+
+                --storepass-env)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--storepass-env 缺少参数" 64
+                    [[ -z "$KEYGEN_STOREPASS_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" 64
+                    KEYGEN_STOREPASS_ENV="$1"
+                    ;;
+
+                --storepass-env=*)
+                    [[ -z "$KEYGEN_STOREPASS_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" 64
+                    KEYGEN_STOREPASS_ENV="${1#--storepass-env=}"
+                    [[ -n "$KEYGEN_STOREPASS_ENV" ]] ||
+                        tadk_die "--storepass-env 缺少参数" 64
+                    ;;
+
+                --keypass-env)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--keypass-env 缺少参数" 64
+                    [[ -z "$KEYGEN_KEYPASS_ENV" ]] ||
+                        tadk_die \
+                            "--keypass-env 不能重复指定" 64
+                    KEYGEN_KEYPASS_ENV="$1"
+                    ;;
+
+                --keypass-env=*)
+                    [[ -z "$KEYGEN_KEYPASS_ENV" ]] ||
+                        tadk_die \
+                            "--keypass-env 不能重复指定" 64
+                    KEYGEN_KEYPASS_ENV="${1#--keypass-env=}"
+                    [[ -n "$KEYGEN_KEYPASS_ENV" ]] ||
+                        tadk_die "--keypass-env 缺少参数" 64
+                    ;;
+
+                --keyalg)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--keyalg 缺少参数" 64
+                    [[ "$KEYGEN_KEY_ALGORITHM_SET" == false ]] ||
+                        tadk_die "--keyalg 不能重复指定" 64
+                    KEYGEN_KEY_ALGORITHM="$1"
+                    KEYGEN_KEY_ALGORITHM_SET=true
+                    ;;
+
+                --keyalg=*)
+                    [[ "$KEYGEN_KEY_ALGORITHM_SET" == false ]] ||
+                        tadk_die "--keyalg 不能重复指定" 64
+                    KEYGEN_KEY_ALGORITHM="${1#--keyalg=}"
+                    [[ -n "$KEYGEN_KEY_ALGORITHM" ]] ||
+                        tadk_die "--keyalg 缺少参数" 64
+                    KEYGEN_KEY_ALGORITHM_SET=true
+                    ;;
+
+                --keysize)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--keysize 缺少参数" 64
+                    [[ "$KEYGEN_KEY_SIZE_SET" == false ]] ||
+                        tadk_die "--keysize 不能重复指定" 64
+                    KEYGEN_KEY_SIZE="$1"
+                    KEYGEN_KEY_SIZE_SET=true
+                    ;;
+
+                --keysize=*)
+                    [[ "$KEYGEN_KEY_SIZE_SET" == false ]] ||
+                        tadk_die "--keysize 不能重复指定" 64
+                    KEYGEN_KEY_SIZE="${1#--keysize=}"
+                    [[ -n "$KEYGEN_KEY_SIZE" ]] ||
+                        tadk_die "--keysize 缺少参数" 64
+                    KEYGEN_KEY_SIZE_SET=true
+                    ;;
+
+                --validity)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--validity 缺少参数" 64
+                    [[ "$KEYGEN_VALIDITY_DAYS_SET" == false ]] ||
+                        tadk_die "--validity 不能重复指定" 64
+                    KEYGEN_VALIDITY_DAYS="$1"
+                    KEYGEN_VALIDITY_DAYS_SET=true
+                    ;;
+
+                --validity=*)
+                    [[ "$KEYGEN_VALIDITY_DAYS_SET" == false ]] ||
+                        tadk_die "--validity 不能重复指定" 64
+                    KEYGEN_VALIDITY_DAYS="${1#--validity=}"
+                    [[ -n "$KEYGEN_VALIDITY_DAYS" ]] ||
+                        tadk_die "--validity 缺少参数" 64
+                    KEYGEN_VALIDITY_DAYS_SET=true
+                    ;;
+
+                --storetype)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--storetype 缺少参数" 64
+                    [[ "$KEYGEN_STORE_TYPE_SET" == false ]] ||
+                        tadk_die "--storetype 不能重复指定" 64
+                    KEYGEN_STORE_TYPE="$1"
+                    KEYGEN_STORE_TYPE_SET=true
+                    ;;
+
+                --storetype=*)
+                    [[ "$KEYGEN_STORE_TYPE_SET" == false ]] ||
+                        tadk_die "--storetype 不能重复指定" 64
+                    KEYGEN_STORE_TYPE="${1#--storetype=}"
+                    [[ -n "$KEYGEN_STORE_TYPE" ]] ||
+                        tadk_die "--storetype 缺少参数" 64
+                    KEYGEN_STORE_TYPE_SET=true
+                    ;;
+
+                --force)
+                    [[ "$KEYGEN_FORCE" == false ]] ||
+                        tadk_die "--force 不能重复指定" 64
+                    KEYGEN_FORCE=true
+                    ;;
+
+                --verbose)
+                    [[ "$KEYGEN_VERBOSE" == false ]] ||
+                        tadk_die "--verbose 不能重复指定" 64
+                    KEYGEN_VERBOSE=true
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                *)
+                    tadk_die "keygen 不支持参数：$1" 64
+                    ;;
+            esac
+
+            shift
+        done
+
+        tadk_release_keygen_execute \
+            "$KEYGEN_KEYSTORE" \
+            "$KEYGEN_ALIAS" \
+            "$KEYGEN_DNAME" \
+            "$KEYGEN_STOREPASS_ENV" \
+            "$KEYGEN_KEYPASS_ENV" \
+            "$KEYGEN_KEY_ALGORITHM" \
+            "$KEYGEN_KEY_SIZE" \
+            "$KEYGEN_VALIDITY_DAYS" \
+            "$KEYGEN_STORE_TYPE" \
+            "$KEYGEN_FORCE" \
+            "$KEYGEN_VERBOSE"
         ;;
 
     init)

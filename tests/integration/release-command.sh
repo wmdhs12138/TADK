@@ -64,6 +64,28 @@ done
 
 printf '\n' >> "$MOCK_LOG"
 
+if [[ "${1:-}" == "-genkeypair" ]]; then
+    keystore_path=""
+
+    while (( $# > 0 )); do
+        case "$1" in
+            -keystore)
+                shift
+                (( $# > 0 )) || exit 64
+                keystore_path="$1"
+                ;;
+        esac
+
+        shift
+    done
+
+    [[ -n "$keystore_path" ]] || exit 64
+
+    printf 'mock keystore\n' > "$keystore_path"
+    printf 'Generated mock key pair\n'
+    exit 0
+fi
+
 cat <<'KEYSTORE'
 Alias name: production
 Entry type: PrivateKeyEntry
@@ -186,6 +208,16 @@ assert_contains \
     "$output" \
     "tadk release verify" \
     "帮助应包含 verify"
+
+assert_contains \
+    "$output" \
+    "tadk release keygen" \
+    "帮助应包含 keygen"
+
+assert_contains \
+    "$output" \
+    "--storepass-env" \
+    "keygen 帮助应说明密码环境变量"
 
 printf 'PASS release help\n\n'
 
@@ -1073,5 +1105,250 @@ assert_contains \
     fail "keytool 校验失败后不得写入签名配置"
 
 printf 'PASS release init preserves keytool failure status\n\n'
+
+
+printf 'TEST release keygen creates protected keystore\n'
+
+KEYGEN_DIRECTORY="$TEST_ROOT/release-keygen"
+KEYGEN_KEYSTORE="$KEYGEN_DIRECTORY/production.p12"
+
+mkdir -p "$KEYGEN_DIRECTORY"
+
+export KEYGEN_STOREPASS='store-secret-123'
+export KEYGEN_KEYPASS='key-secret-456'
+
+: > "$MOCK_LOG"
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keygen \
+        --keystore "$KEYGEN_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Test, O=TADK, C=CA" \
+        --storepass-env KEYGEN_STOREPASS \
+        --keypass-env KEYGEN_KEYPASS \
+        --keyalg RSA \
+        --keysize 3072 \
+        --validity 3650 \
+        --storetype PKCS12 \
+        2>&1
+)"
+
+[[ -f "$KEYGEN_KEYSTORE" ]] ||
+    fail "release keygen 应创建 keystore"
+
+permissions="$(stat -c '%a' "$KEYGEN_KEYSTORE")"
+
+assert_equals \
+    "600" \
+    "$permissions" \
+    "生成的 keystore 权限应为 600"
+
+assert_contains \
+    "$output" \
+    "已生成：$KEYGEN_KEYSTORE" \
+    "release keygen 应报告生成路径"
+
+assert_contains \
+    "$output" \
+    "算法：RSA 3072-bit" \
+    "release keygen 应显示算法信息"
+
+if [[ "$output" == *"$KEYGEN_STOREPASS"* ||
+      "$output" == *"$KEYGEN_KEYPASS"* ]]; then
+    fail "release keygen 输出不得包含密码值"
+fi
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "keytool -genkeypair" \
+    "release keygen 应调用 keytool -genkeypair"
+
+assert_contains \
+    "$calls" \
+    "-keystore $KEYGEN_KEYSTORE.tadk." \
+    "keytool 应先写入临时 keystore"
+
+assert_contains \
+    "$calls" \
+    "-alias production" \
+    "keytool 应接收签名 alias"
+
+assert_contains \
+    "$calls" \
+    "-keyalg RSA" \
+    "keytool 应接收密钥算法"
+
+assert_contains \
+    "$calls" \
+    "-keysize 3072" \
+    "keytool 应接收密钥长度"
+
+assert_contains \
+    "$calls" \
+    "-validity 3650" \
+    "keytool 应接收证书有效期"
+
+assert_contains \
+    "$calls" \
+    "-storetype PKCS12" \
+    "keytool 应接收 keystore 类型"
+
+assert_contains \
+    "$calls" \
+    "-storepass:env KEYGEN_STOREPASS" \
+    "store 密码应通过环境变量传递"
+
+assert_contains \
+    "$calls" \
+    "-keypass:env KEYGEN_KEYPASS" \
+    "key 密码应通过环境变量传递"
+
+if [[ "$calls" == *"$KEYGEN_STOREPASS"* ||
+      "$calls" == *"$KEYGEN_KEYPASS"* ]]; then
+    fail "keytool 参数不得包含密码值"
+fi
+
+printf 'PASS release keygen creates protected keystore\n\n'
+
+printf 'TEST release keygen refuses overwrite by default\n'
+
+printf 'original keystore\n' > "$KEYGEN_KEYSTORE"
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keygen \
+        --keystore "$KEYGEN_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Test, O=TADK, C=CA" \
+        --storepass-env KEYGEN_STOREPASS \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "release keygen 默认不应覆盖已有 keystore"
+
+assert_contains \
+    "$output" \
+    "keystore 已存在，不会覆盖" \
+    "release keygen 应说明拒绝覆盖"
+
+assert_file_contains \
+    "$KEYGEN_KEYSTORE" \
+    "original keystore" \
+    "拒绝覆盖时应保留原 keystore"
+
+printf 'PASS release keygen refuses overwrite by default\n\n'
+
+printf 'TEST release keygen force replaces atomically\n'
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keygen \
+        --keystore "$KEYGEN_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Test, O=TADK, C=CA" \
+        --storepass-env KEYGEN_STOREPASS \
+        --force \
+        2>&1
+)"
+
+assert_file_contains \
+    "$KEYGEN_KEYSTORE" \
+    "mock keystore" \
+    "--force 应在生成成功后替换原 keystore"
+
+assert_contains \
+    "$output" \
+    "覆盖已有 keystore：true" \
+    "--force 输出应说明覆盖模式"
+
+printf 'PASS release keygen force replaces atomically\n\n'
+
+printf 'TEST release keygen preserves original on keytool failure\n'
+
+printf 'valuable original keystore\n' > "$KEYGEN_KEYSTORE"
+
+export MOCK_KEYTOOL_FAIL=true
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keygen \
+        --keystore "$KEYGEN_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Test, O=TADK, C=CA" \
+        --storepass-env KEYGEN_STOREPASS \
+        --force \
+        2>&1
+)"
+command_status=$?
+set -e
+
+unset MOCK_KEYTOOL_FAIL
+
+assert_equals \
+    "23" \
+    "$command_status" \
+    "release keygen 应保留 keytool 失败状态"
+
+assert_contains \
+    "$output" \
+    "keystore 生成失败" \
+    "release keygen 应报告生成失败"
+
+assert_file_contains \
+    "$KEYGEN_KEYSTORE" \
+    "valuable original keystore" \
+    "keytool 失败时不得破坏原 keystore"
+
+if compgen -G "$KEYGEN_KEYSTORE.tadk.*" >/dev/null; then
+    fail "keytool 失败后不得残留临时 keystore"
+fi
+
+printf 'PASS release keygen preserves original on keytool failure\n\n'
+
+printf 'TEST release keygen rejects duplicate default option\n'
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keygen \
+        --keystore "$TEST_ROOT/duplicate.p12" \
+        --alias production \
+        --dname "CN=TADK Test, O=TADK, C=CA" \
+        --storepass-env KEYGEN_STOREPASS \
+        --keysize 4096 \
+        --keysize 4096 \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_equals \
+    "64" \
+    "$command_status" \
+    "重复指定默认值选项也应返回用法错误"
+
+assert_contains \
+    "$output" \
+    "--keysize 不能重复指定" \
+    "应识别重复的默认 keysize"
+
+printf 'PASS release keygen rejects duplicate default option\n\n'
+
+unset KEYGEN_STOREPASS
+unset KEYGEN_KEYPASS
 
 printf 'PASS: release command integration\n'
