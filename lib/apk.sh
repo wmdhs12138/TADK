@@ -31,6 +31,93 @@ tadk_find_latest_apk() {
     return 1
 }
 
+tadk_find_latest_module_apk() {
+    if (( $# < 2 || $# > 3 )); then
+        return 64
+    fi
+
+    local project_root="$1"
+    local module="$2"
+    local build_type="${3:-debug}"
+    local module_root
+    local apk=""
+
+    [[ -d "$project_root" ]] || return 1
+
+    case "$module" in
+        ''|*[!A-Za-z0-9_.-]*)
+            return 1
+            ;;
+    esac
+
+    tadk_apk_validate_type "$build_type" ||
+        return 1
+
+    module_root="$project_root/$module"
+
+    [[ -d "$module_root" ]] || return 1
+
+    apk="$(
+        find "$module_root/build/outputs/apk/$build_type" \
+            -maxdepth 1 \
+            -type f \
+            -name '*.apk' \
+            ! -name '*androidTest*.apk' \
+            ! -name '*unaligned*.apk' \
+            -printf '%T@ %p\n' 2>/dev/null |
+            sort -nr |
+            head -n 1 |
+            cut -d' ' -f2-
+    )"
+
+    if [[ -n "$apk" && -f "$apk" ]]; then
+        printf '%s\n' "$apk"
+        return 0
+    fi
+
+    return 1
+}
+
+tadk_apk_resolve_module() {
+    if (( $# < 3 || $# > 4 )); then
+        return 64
+    fi
+
+    local project_root="$1"
+    local module="$2"
+    local build_type="$3"
+    local requested_path="${4:-}"
+    local resolved_path=""
+
+    tadk_apk_validate_type "$build_type" ||
+        return 1
+
+    if [[ -n "$requested_path" ]]; then
+        resolved_path="$(tadk_absolute_path "$requested_path")" ||
+            return 1
+
+        [[ -f "$resolved_path" ]] ||
+            return 1
+
+        case "$resolved_path" in
+            "$project_root/$module/"*.apk|\
+            "$project_root/$module/"*/build/outputs/apk/*/*.apk)
+                printf '%s\n' "$resolved_path"
+                return 0
+                ;;
+
+            *)
+                return 1
+                ;;
+        esac
+    fi
+
+    tadk_find_latest_module_apk \
+        "$project_root" \
+        "$module" \
+        "$build_type"
+}
+
 tadk_find_debug_apk() {
     tadk_find_latest_apk "$1" debug
 }
