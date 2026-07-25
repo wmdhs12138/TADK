@@ -16,15 +16,18 @@ on ARM64 Android devices.
 - Package-filtered logcat support
 - Composed `tadk dev` development workflow
 - Workflow-based `tadk run` orchestration
+- Existing-project initialization with `.tadk/project.conf`
+- Configured module and variant support across build/install/run/dev
+- Environment diagnostics through `tadk doctor`
 - Unified unit, smoke and integration test command
 
 ## Project status
 
-Current development version: `0.3.0-alpha.17`
+Current development version: `0.3.0-alpha.18`
 
-Alpha.17 improves test reliability by automatically discovering unit
-and integration test scripts. It also centralizes shared discovery,
-execution and result-summary behavior in a reusable test-suite runner.
+Alpha.18 adds persistent Android project configuration. TADK can now
+initialize existing projects and consistently apply the configured
+module and variant across build, install, run and development workflows.
 
 This is an alpha release intended for development and testing in
 Termux on ARM64 Android devices.
@@ -44,6 +47,32 @@ Run one test group:
     tadk test unit
     tadk test smoke
     tadk test integration
+
+## Initialize an existing project
+
+Run this from an existing Android Gradle project:
+
+    tadk init
+
+TADK creates:
+
+    .tadk/project.conf
+
+Example:
+
+    version=1
+    module=app
+    variant=debug
+
+The configured module and variant are applied by:
+
+    tadk build
+    tadk install
+    tadk run
+    tadk dev
+
+Command-line `--debug` and `--release` options take precedence over the
+configured variant.
 
 ## Environment diagnostics
 
@@ -65,8 +94,13 @@ Useful options:
     tadk run --install
     tadk run --release --build-only
 
-By default, TADK builds a Debug APK and opens the Android package
-installer using `termux-open`.
+When `.tadk/project.conf` exists, TADK uses its configured module and
+variant. Without configuration, TADK retains the existing Debug and
+project-wide compatibility behavior.
+
+The `--debug` and `--release` options override the configured variant.
+By default, `tadk run` opens the Android package installer using
+`termux-open`.
 
 Internally, `tadk run` uses the Workflow Engine for these stages:
 
