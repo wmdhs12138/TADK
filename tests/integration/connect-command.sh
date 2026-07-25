@@ -37,6 +37,11 @@ printf '\n' >> "$MOCK_LOG"
 
 case "${1:-}" in
     connect)
+        if [[ "${2:-}" == "failure.test:5555" ]]; then
+            printf 'failed to connect to %s\n' "${2:-}" >&2
+            exit 1
+        fi
+
         printf 'connected to %s\n' "${2:-}"
         ;;
 
@@ -324,4 +329,47 @@ assert_contains \
     "应说明配对码格式"
 
 printf 'PASS pairing code must be numeric\n\n'
+
+printf '\nTEST failed operation still displays devices\n'
+
+reset_log
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        connect \
+        failure.test:5555 \
+        2>&1
+)"
+status=$?
+set -e
+
+assert_failure \
+    "$status" \
+    "ADB 连接失败时命令应返回非零"
+
+assert_contains \
+    "$output" \
+    "ADB 连接失败" \
+    "应显示连接失败信息"
+
+assert_contains \
+    "$output" \
+    "当前 ADB 设备" \
+    "连接失败后仍应显示设备状态"
+
+assert_contains \
+    "$output" \
+    "192.168.1.8:37123" \
+    "连接失败后应列出当前设备"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "adb devices -l" \
+    "连接失败后仍应刷新设备列表"
+
+printf 'PASS failed operation still displays devices\n'
+
 printf 'PASS: connect command integration\n'

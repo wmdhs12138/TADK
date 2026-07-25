@@ -283,8 +283,11 @@ case "$ACTION" in
         validate_address "$ADDRESS" ||
             exit $?
 
-        connect_device
-        operation_status=$?
+        if connect_device; then
+            operation_status=0
+        else
+            operation_status=$?
+        fi
         ;;
 
     pair)
@@ -296,21 +299,30 @@ case "$ACTION" in
             tadk_die "配对码只能包含数字"
         fi
 
-        pair_device
-        operation_status=$?
+        if pair_device; then
+            operation_status=0
+        else
+            operation_status=$?
+        fi
         ;;
 
     disconnect)
         validate_address "$ADDRESS" ||
             exit $?
 
-        disconnect_device
-        operation_status=$?
+        if disconnect_device; then
+            operation_status=0
+        else
+            operation_status=$?
+        fi
         ;;
 
     disconnect-all)
-        disconnect_all_devices
-        operation_status=$?
+        if disconnect_all_devices; then
+            operation_status=0
+        else
+            operation_status=$?
+        fi
         ;;
 
     *)
