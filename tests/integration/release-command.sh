@@ -113,6 +113,35 @@ chmod +x \
 export MOCK_LOG
 export PATH="$MOCK_BIN:$PATH"
 
+assert_equals() {
+    if (( $# != 3 )); then
+        fail "assert_equals 需要 EXPECTED、ACTUAL 和 MESSAGE"
+    fi
+
+    local expected="$1"
+    local actual="$2"
+    local message="$3"
+
+    [[ "$actual" == "$expected" ]] ||
+        fail "$message；期望：$expected；实际：$actual"
+}
+
+assert_file_contains() {
+    if (( $# != 3 )); then
+        fail "assert_file_contains 需要 FILE、NEEDLE 和 MESSAGE"
+    fi
+
+    local file_path="$1"
+    local needle="$2"
+    local message="$3"
+
+    [[ -f "$file_path" ]] ||
+        fail "$message；文件不存在：$file_path"
+
+    grep -Fq -- "$needle" "$file_path" ||
+        fail "$message"
+}
+
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
     exit 1
@@ -647,5 +676,184 @@ assert_contains \
     "应明确拒绝非法环境变量名称"
 
 printf 'PASS release keystore rejects invalid environment name\n\n'
+
+
+printf 'TEST release setup generates Kotlin signing skeleton\n'
+
+SETUP_KOTLIN="$TEST_ROOT/setup-kotlin"
+
+mkdir -p \
+    "$SETUP_KOTLIN/app" \
+    "$SETUP_KOTLIN/.tadk"
+
+cat > "$SETUP_KOTLIN/gradlew" <<'GRADLEW'
+#!/data/data/com.termux/files/usr/bin/bash
+exit 0
+GRADLEW
+
+chmod +x "$SETUP_KOTLIN/gradlew"
+
+cat > "$SETUP_KOTLIN/settings.gradle.kts" <<'SETTINGS'
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+SETTINGS
+
+cat > "$SETUP_KOTLIN/app/build.gradle.kts" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "dev.tadk.setup"
+}
+BUILD
+
+cat > "$SETUP_KOTLIN/.tadk/project.conf" <<'CONFIG'
+version=1
+module=app
+variant=debug
+CONFIG
+
+(
+    cd "$SETUP_KOTLIN"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        setup \
+        >/dev/null
+)
+
+[[ -f "$SETUP_KOTLIN/keystore.properties.example" ]] ||
+    fail "应生成 keystore.properties.example"
+
+[[ -f "$SETUP_KOTLIN/.tadk/release-signing-snippet.gradle.kts" ]] ||
+    fail "Kotlin 项目应生成 Kotlin DSL 签名片段"
+
+assert_file_contains \
+    "$SETUP_KOTLIN/keystore.properties.example" \
+    "storePassword=CHANGE_ME" \
+    "properties 示例不得包含真实密码"
+
+assert_file_contains \
+    "$SETUP_KOTLIN/.tadk/release-signing-snippet.gradle.kts" \
+    'signingConfigs {' \
+    "Kotlin 签名片段应包含 signingConfigs"
+
+assert_file_contains \
+    "$SETUP_KOTLIN/.gitignore" \
+    "/keystore.properties" \
+    "应忽略本地签名属性文件"
+
+assert_file_contains \
+    "$SETUP_KOTLIN/.gitignore" \
+    "/release.jks" \
+    "应忽略默认 keystore"
+
+printf 'PASS release setup generates Kotlin signing skeleton\n\n'
+
+printf 'TEST release setup is idempotent for gitignore\n'
+
+(
+    cd "$SETUP_KOTLIN"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        setup \
+        --force \
+        >/dev/null
+)
+
+ignore_count="$(
+    grep -Fxc \
+        "# TADK Release signing" \
+        "$SETUP_KOTLIN/.gitignore"
+)"
+
+assert_equals \
+    "1" \
+    "$ignore_count" \
+    "重复 setup 不应重复写入 gitignore"
+
+printf 'PASS release setup is idempotent for gitignore\n\n'
+
+printf 'TEST release setup detects Groovy DSL\n'
+
+SETUP_GROOVY="$TEST_ROOT/setup-groovy"
+
+mkdir -p "$SETUP_GROOVY/mobile"
+
+cat > "$SETUP_GROOVY/gradlew" <<'GRADLEW'
+#!/data/data/com.termux/files/usr/bin/bash
+exit 0
+GRADLEW
+
+chmod +x "$SETUP_GROOVY/gradlew"
+
+cat > "$SETUP_GROOVY/settings.gradle" <<'SETTINGS'
+include ':mobile'
+SETTINGS
+
+cat > "$SETUP_GROOVY/mobile/build.gradle" <<'BUILD'
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'dev.tadk.groovy'
+}
+BUILD
+
+(
+    cd "$SETUP_GROOVY"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        setup \
+        --module mobile \
+        >/dev/null
+)
+
+[[ -f "$SETUP_GROOVY/.tadk/release-signing-snippet.gradle" ]] ||
+    fail "Groovy 项目应生成 Groovy DSL 签名片段"
+
+[[ ! -e "$SETUP_GROOVY/.tadk/release-signing-snippet.gradle.kts" ]] ||
+    fail "Groovy 项目不应生成 Kotlin DSL 签名片段"
+
+assert_file_contains \
+    "$SETUP_GROOVY/.tadk/release-signing-snippet.gradle" \
+    "signingConfigs {" \
+    "Groovy 签名片段应包含 signingConfigs"
+
+printf 'PASS release setup detects Groovy DSL\n\n'
+
+printf 'TEST release setup refuses template overwrite\n'
+
+set +e
+output="$(
+    cd "$SETUP_KOTLIN"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        setup \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "未指定 --force 时不应覆盖已有模板"
+
+assert_contains \
+    "$output" \
+    "文件已存在，不会覆盖" \
+    "应说明 setup 拒绝覆盖已有模板"
+
+printf 'PASS release setup refuses template overwrite\n\n'
 
 printf 'PASS: release command integration\n'

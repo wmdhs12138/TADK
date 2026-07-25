@@ -9,6 +9,7 @@ source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/project.sh"
 source "$TADK_ROOT/lib/config.sh"
 source "$TADK_ROOT/lib/apk.sh"
+source "$TADK_ROOT/lib/release_setup.sh"
 
 ACTION=""
 APK_ARGUMENT=""
@@ -16,6 +17,8 @@ RELEASE_BUILD_ARGS=()
 KEYSTORE_ARGUMENT=""
 KEYSTORE_ALIAS=""
 KEYSTORE_PASSWORD_ENV=""
+SETUP_MODULE=""
+SETUP_FORCE=false
 
 usage() {
     cat <<'HELP'
@@ -24,12 +27,14 @@ usage() {
   tadk release verify [APK]
   tadk release build [构建选项]
   tadk release keystore KEYSTORE [选项]
+  tadk release setup [选项]
 
 操作：
   doctor              检查 Android Release 签名验证环境
   verify [APK]        验证 APK 签名、证书和文件摘要
   build               构建 Release APK 并验证签名
   keystore            检查 keystore 内容和签名证书
+  setup               生成安全的 Release 签名配置骨架
 
 构建选项：
   --clean             构建前执行 Gradle clean
@@ -40,6 +45,10 @@ usage() {
 keystore 选项：
   --alias ALIAS       只检查指定的 keystore 条目
   --storepass-env VAR 从环境变量 VAR 读取 keystore 密码
+
+setup 选项：
+  --module MODULE     指定 Android 应用模块
+  --force             覆盖已有的 TADK 签名模板
 
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
@@ -64,6 +73,8 @@ keystore 选项：
   tadk release keystore release.jks --alias production
   TADK_STOREPASS=secret tadk release keystore release.jks \
     --storepass-env TADK_STOREPASS
+  tadk release setup
+  tadk release setup --module app
 HELP
 }
 
@@ -533,6 +544,59 @@ case "$ACTION" in
         )" || exit $?
 
         verify_apk_signature "$APK_PATH"
+        ;;
+
+    setup)
+        while (( $# > 0 )); do
+            case "$1" in
+                --module)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--module 缺少参数" 64
+
+                    [[ -z "$SETUP_MODULE" ]] ||
+                        tadk_die "--module 不能重复指定" 64
+
+                    SETUP_MODULE="$1"
+                    ;;
+
+                --module=*)
+                    [[ -z "$SETUP_MODULE" ]] ||
+                        tadk_die "--module 不能重复指定" 64
+
+                    SETUP_MODULE="${1#--module=}"
+
+                    [[ -n "$SETUP_MODULE" ]] ||
+                        tadk_die "--module 缺少参数" 64
+                    ;;
+
+                --force)
+                    [[ "$SETUP_FORCE" == false ]] ||
+                        tadk_die "--force 不能重复指定" 64
+
+                    SETUP_FORCE=true
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                *)
+                    tadk_die "setup 不支持参数：$1" 64
+                    ;;
+            esac
+
+            shift
+        done
+
+        PROJECT_ROOT="$(tadk_require_project_root)"
+
+        tadk_release_setup_execute \
+            "$SETUP_MODULE" \
+            "$SETUP_FORCE" \
+            "$PROJECT_ROOT"
         ;;
 
     keystore)
