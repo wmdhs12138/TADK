@@ -36,6 +36,54 @@ tadk_release_bootstrap_run_step() {
     return "$step_status"
 }
 
+tadk_release_bootstrap_ignore_keystore() {
+    if (( $# != 2 )); then
+        tadk_error \
+            "内部错误：keystore 忽略规则需要项目和 keystore 路径"
+        return 64
+    fi
+
+    local project_root="$1"
+    local keystore_path="$2"
+    local gitignore_path="$project_root/.gitignore"
+    local relative_path=""
+
+    case "$keystore_path" in
+        "$project_root"/*)
+            relative_path="${keystore_path#"$project_root"/}"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    [[ -n "$relative_path" ]] || {
+        tadk_error \
+            "内部错误：无法生成 keystore 的项目相对路径"
+        return 64
+    }
+
+    touch "$gitignore_path"
+
+    if grep -Fqx \
+        "/$relative_path" \
+        "$gitignore_path"; then
+        return 0
+    fi
+
+    if [[ -s "$gitignore_path" ]]; then
+        printf '\n' >> "$gitignore_path"
+    fi
+
+    printf '%s\n' \
+        "# TADK generated Release keystore" \
+        "/$relative_path" \
+        >> "$gitignore_path"
+
+    tadk_info \
+        "已加入 .gitignore：/$relative_path"
+}
+
 tadk_release_bootstrap_execute() {
     if (( $# != 13 )); then
         tadk_error \
@@ -132,6 +180,11 @@ tadk_release_bootstrap_execute() {
         "$store_type" \
         "$force" \
         "$verbose" ||
+        return $?
+
+    tadk_release_bootstrap_ignore_keystore \
+        "$project_root" \
+        "$resolved_keystore" ||
         return $?
 
     tadk_release_bootstrap_run_step \

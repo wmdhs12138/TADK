@@ -1992,6 +1992,11 @@ assert_file_contains \
     "/keystore.properties" \
     "bootstrap 应忽略本地签名配置"
 
+assert_file_contains \
+    "$BOOTSTRAP_PROJECT/.gitignore" \
+    "/production.p12" \
+    "bootstrap 应忽略项目内生成的 keystore"
+
 calls="$(cat "$MOCK_LOG")"
 
 assert_contains \
