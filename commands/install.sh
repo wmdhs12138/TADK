@@ -7,15 +7,22 @@ TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/project.sh"
+source "$TADK_ROOT/lib/config.sh"
 source "$TADK_ROOT/lib/apk.sh"
 source "$TADK_ROOT/lib/adb.sh"
 
 BUILD_TYPE="debug"
+BUILD_TYPE_EXPLICIT=false
 APK_PATH=""
 ALLOW_DOWNGRADE=false
 GRANT_PERMISSIONS=false
 REINSTALL=true
 ADB_EXTRA_ARGS=()
+
+PROJECT_ROOT=""
+PROJECT_MODULE=""
+CONFIG_LOADED=false
+RESOLVED_APK_PATH=""
 
 usage() {
     cat <<'HELP'
@@ -25,8 +32,11 @@ usage() {
 说明：
   安装已有 APK，不执行构建，也不自动启动应用。
 
+  未指定 APK 路径时，如果项目存在 .tadk/project.conf，将从配置的
+  module 中查找 APK，并默认使用配置的 variant。
+
 选项：
-  --debug            安装最新 Debug APK（默认）
+  --debug            安装最新 Debug APK
   --release          安装最新 Release APK
   --apk PATH         安装指定 APK
   --no-reinstall     不使用 -r 覆盖安装
@@ -34,6 +44,14 @@ usage() {
   --grant            自动授予运行时权限，对应 adb install -g
   --                  将后续参数直接传递给 adb install
   -h, --help         显示帮助
+
+优先级：
+  指定 APK 路径
+      > 配置模块
+
+  --debug / --release
+      > project.conf 中的 variant
+      > 默认 debug
 
 示例：
   tadk install
@@ -45,33 +63,74 @@ usage() {
 HELP
 }
 
-resolve_apk_path() {
-    local project_root=""
-
-    if [[ -n "$APK_PATH" ]]; then
-        tadk_apk_resolve             "${PWD}"             "$BUILD_TYPE"             "$APK_PATH"
-        return
-    fi
-
-    project_root="$(tadk_require_project_root)"
-
-    tadk_apk_resolve         "$project_root"         "$BUILD_TYPE"
+resolve_explicit_apk() {
+    tadk_apk_resolve \
+        "$PWD" \
+        "$BUILD_TYPE" \
+        "$APK_PATH"
 }
 
-while [[ $# -gt 0 ]]; do
+resolve_project_apk() {
+    local config_status=0
+    local resolved_path=""
+
+    PROJECT_ROOT="$(tadk_require_project_root)"
+
+    if tadk_config_load "$PROJECT_ROOT"; then
+        CONFIG_LOADED=true
+        PROJECT_MODULE="$TADK_CONFIG_MODULE"
+
+        if [[ "$BUILD_TYPE_EXPLICIT" != true ]]; then
+            BUILD_TYPE="$TADK_CONFIG_VARIANT"
+        fi
+    else
+        config_status=$?
+
+        if (( config_status != 1 )); then
+            tadk_die \
+                "无法加载项目配置，状态码：$config_status"
+        fi
+    fi
+
+    if [[ "$CONFIG_LOADED" == true ]]; then
+        if [[ ! -d "$PROJECT_ROOT/$PROJECT_MODULE" ]]; then
+            tadk_die \
+                "配置的模块目录不存在：$PROJECT_ROOT/$PROJECT_MODULE"
+        fi
+
+        resolved_path="$(
+            tadk_apk_resolve_module \
+                "$PROJECT_ROOT" \
+                "$PROJECT_MODULE" \
+                "$BUILD_TYPE"
+        )" || return $?
+    else
+        resolved_path="$(
+            tadk_apk_resolve \
+                "$PROJECT_ROOT" \
+                "$BUILD_TYPE"
+        )" || return $?
+    fi
+
+    RESOLVED_APK_PATH="$resolved_path"
+}
+
+while (( $# > 0 )); do
     case "$1" in
         --debug)
             BUILD_TYPE="debug"
+            BUILD_TYPE_EXPLICIT=true
             ;;
 
         --release)
             BUILD_TYPE="release"
+            BUILD_TYPE_EXPLICIT=true
             ;;
 
         --apk)
             shift
 
-            [[ $# -gt 0 ]] ||
+            (( $# > 0 )) ||
                 tadk_die "--apk 缺少路径参数"
 
             APK_PATH="$1"
@@ -79,6 +138,9 @@ while [[ $# -gt 0 ]]; do
 
         --apk=*)
             APK_PATH="${1#--apk=}"
+
+            [[ -n "$APK_PATH" ]] ||
+                tadk_die "--apk 缺少路径参数"
             ;;
 
         --no-reinstall)
@@ -96,7 +158,7 @@ while [[ $# -gt 0 ]]; do
         --)
             shift
 
-            while [[ $# -gt 0 ]]; do
+            while (( $# > 0 )); do
                 ADB_EXTRA_ARGS+=("$1")
                 shift
             done
@@ -125,8 +187,13 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-RESOLVED_APK_PATH="$(resolve_apk_path)" ||
-    tadk_die "未找到 $BUILD_TYPE APK，请先执行：tadk build"
+if [[ -n "$APK_PATH" ]]; then
+    RESOLVED_APK_PATH="$(resolve_explicit_apk)" ||
+        tadk_die "APK 不存在或不是有效的 APK 文件：$APK_PATH"
+else
+    resolve_project_apk ||
+        tadk_die "未找到 $BUILD_TYPE APK，请先执行：tadk build"
+fi
 
 [[ -f "$RESOLVED_APK_PATH" ]] ||
     tadk_die "APK 不存在：$RESOLVED_APK_PATH"
@@ -154,6 +221,16 @@ tadk_separator
 printf 'APK：%s\n' "$RESOLVED_APK_PATH"
 printf '大小：%s\n' "${APK_SIZE:-未知}"
 printf '类型：%s\n' "$BUILD_TYPE"
+
+if [[ -n "$APK_PATH" ]]; then
+    printf '来源：显式 APK 路径\n'
+elif [[ "$CONFIG_LOADED" == true ]]; then
+    printf '配置：%s\n' "$PROJECT_ROOT/.tadk/project.conf"
+    printf '模块：%s\n' "$PROJECT_MODULE"
+else
+    printf '配置：未找到，使用兼容模式\n'
+fi
+
 printf '覆盖安装：%s\n' "$REINSTALL"
 printf '允许降级：%s\n' "$ALLOW_DOWNGRADE"
 printf '自动授权：%s\n' "$GRANT_PERMISSIONS"
