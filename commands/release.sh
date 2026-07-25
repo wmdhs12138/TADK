@@ -10,6 +10,7 @@ source "$TADK_ROOT/lib/project.sh"
 source "$TADK_ROOT/lib/config.sh"
 source "$TADK_ROOT/lib/apk.sh"
 source "$TADK_ROOT/lib/release_setup.sh"
+source "$TADK_ROOT/lib/release_init.sh"
 
 ACTION=""
 APK_ARGUMENT=""
@@ -19,6 +20,12 @@ KEYSTORE_ALIAS=""
 KEYSTORE_PASSWORD_ENV=""
 SETUP_MODULE=""
 SETUP_FORCE=false
+INIT_KEYSTORE=""
+INIT_ALIAS=""
+INIT_STOREPASS_ENV=""
+INIT_KEYPASS_ENV=""
+INIT_FORCE=false
+INIT_VALIDATE_ONLY=false
 
 usage() {
     cat <<'HELP'
@@ -28,6 +35,7 @@ usage() {
   tadk release build [构建选项]
   tadk release keystore KEYSTORE [选项]
   tadk release setup [选项]
+  tadk release init [选项]
 
 操作：
   doctor              检查 Android Release 签名验证环境
@@ -35,6 +43,7 @@ usage() {
   build               构建 Release APK 并验证签名
   keystore            检查 keystore 内容和签名证书
   setup               生成安全的 Release 签名配置骨架
+  init                创建本地 keystore.properties
 
 构建选项：
   --clean             构建前执行 Gradle clean
@@ -49,6 +58,17 @@ keystore 选项：
 setup 选项：
   --module MODULE     指定 Android 应用模块
   --force             覆盖已有的 TADK 签名模板
+
+init 选项：
+  --keystore PATH     指定已有 keystore
+  --alias ALIAS       指定签名 alias
+  --storepass-env VAR 从环境变量读取 keystore 密码
+  --keypass-env VAR   从环境变量读取 key 密码
+  --validate-only     只校验 keystore 密码和 alias，不写入配置
+  --force             覆盖已有 keystore.properties
+
+  init 可校验 keystore 密码和 alias。key 密码会安全读取并写入
+  本地配置，但 keytool -list 无法验证独立的 key 密码。
 
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
@@ -75,6 +95,8 @@ setup 选项：
     --storepass-env TADK_STOREPASS
   tadk release setup
   tadk release setup --module app
+  tadk release init --keystore release.jks --alias release \
+    --storepass-env TADK_STOREPASS
 HELP
 }
 
@@ -544,6 +566,119 @@ case "$ACTION" in
         )" || exit $?
 
         verify_apk_signature "$APK_PATH"
+        ;;
+
+    init)
+        while (( $# > 0 )); do
+            case "$1" in
+                --keystore)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--keystore 缺少参数" 64
+                    [[ -z "$INIT_KEYSTORE" ]] ||
+                        tadk_die "--keystore 不能重复指定" 64
+                    INIT_KEYSTORE="$1"
+                    ;;
+
+                --keystore=*)
+                    [[ -z "$INIT_KEYSTORE" ]] ||
+                        tadk_die "--keystore 不能重复指定" 64
+                    INIT_KEYSTORE="${1#--keystore=}"
+                    [[ -n "$INIT_KEYSTORE" ]] ||
+                        tadk_die "--keystore 缺少参数" 64
+                    ;;
+
+                --alias)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--alias 缺少参数" 64
+                    [[ -z "$INIT_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+                    INIT_ALIAS="$1"
+                    ;;
+
+                --alias=*)
+                    [[ -z "$INIT_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+                    INIT_ALIAS="${1#--alias=}"
+                    [[ -n "$INIT_ALIAS" ]] ||
+                        tadk_die "--alias 缺少参数" 64
+                    ;;
+
+                --storepass-env)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--storepass-env 缺少参数" 64
+                    [[ -z "$INIT_STOREPASS_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" 64
+                    INIT_STOREPASS_ENV="$1"
+                    ;;
+
+                --storepass-env=*)
+                    [[ -z "$INIT_STOREPASS_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" 64
+                    INIT_STOREPASS_ENV="${1#--storepass-env=}"
+                    [[ -n "$INIT_STOREPASS_ENV" ]] ||
+                        tadk_die "--storepass-env 缺少参数" 64
+                    ;;
+
+                --keypass-env)
+                    shift
+                    (( $# > 0 )) ||
+                        tadk_die "--keypass-env 缺少参数" 64
+                    [[ -z "$INIT_KEYPASS_ENV" ]] ||
+                        tadk_die \
+                            "--keypass-env 不能重复指定" 64
+                    INIT_KEYPASS_ENV="$1"
+                    ;;
+
+                --keypass-env=*)
+                    [[ -z "$INIT_KEYPASS_ENV" ]] ||
+                        tadk_die \
+                            "--keypass-env 不能重复指定" 64
+                    INIT_KEYPASS_ENV="${1#--keypass-env=}"
+                    [[ -n "$INIT_KEYPASS_ENV" ]] ||
+                        tadk_die "--keypass-env 缺少参数" 64
+                    ;;
+
+                --validate-only)
+                    [[ "$INIT_VALIDATE_ONLY" == false ]] ||
+                        tadk_die \
+                            "--validate-only 不能重复指定" 64
+                    INIT_VALIDATE_ONLY=true
+                    ;;
+
+                --force)
+                    [[ "$INIT_FORCE" == false ]] ||
+                        tadk_die "--force 不能重复指定" 64
+                    INIT_FORCE=true
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                *)
+                    tadk_die "init 不支持参数：$1" 64
+                    ;;
+            esac
+
+            shift
+        done
+
+        PROJECT_ROOT="$(tadk_require_project_root)"
+
+        tadk_release_init_execute \
+            "$PROJECT_ROOT" \
+            "$INIT_KEYSTORE" \
+            "$INIT_ALIAS" \
+            "$INIT_STOREPASS_ENV" \
+            "$INIT_KEYPASS_ENV" \
+            "$INIT_FORCE" \
+            "$INIT_VALIDATE_ONLY"
         ;;
 
     setup)
