@@ -48,6 +48,33 @@ workflow_step STEP
 workflow_run STEP...
 ```
 
+### Workflow API compatibility contract
+
+The seven functions above are public library APIs. Their observable
+behavior is covered by `tests/unit/workflow-contract.sh` and follows these
+rules:
+
+- `workflow_register_if` returning false from its condition skips that step,
+  returns success, and allows later steps to run.
+- A selected step runs `condition -> before hooks -> step body -> after hooks`.
+  Hooks run in registration order; an unsuccessful condition or step does not
+  run the remaining hooks for that step.
+- `workflow_run` is sequential and fail-fast. It returns the first non-zero
+  status without running later steps.
+
+The reserved exit codes are:
+
+| Code | Meaning |
+| ---: | --- |
+| 0 | Success, including a conditionally skipped step |
+| 64 | Invalid arguments or names |
+| 65 | Duplicate step registration |
+| 66 | Unknown step |
+| 127 | Missing or unavailable function |
+
+Consumers should depend on these public functions and codes, not on the
+internal associative arrays used by the implementation.
+
 The engine owns registration, condition checks, hook ordering, sequential
 execution, fail-fast behavior, and exit-code propagation. A registered
 step runs as:
