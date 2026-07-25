@@ -17,6 +17,7 @@ source "$TADK_ROOT/lib/workflow.sh"
 BUILD_TYPE="debug"
 BUILD_TYPE_EXPLICIT=false
 INSTALL_MODE="open"
+DEVICE_SERIAL=""
 CLEAN_FIRST=false
 FOLLOW_LOGCAT=false
 GRADLE_EXTRA_ARGS=()
@@ -46,6 +47,7 @@ usage() {
   --build-only       只构建 APK，不打开或安装
   --install          使用 adb install -r 安装 APK
   --open             使用 termux-open 打开安装界面（默认）
+  --device SERIAL    指定 ADB 目标设备
   --debug            构建 Debug APK
   --release          构建 Release APK
   --clean            构建前先执行 Gradle clean
@@ -64,6 +66,7 @@ usage() {
   tadk run
   tadk run --build-only
   tadk run --install
+  tadk run --install --device 172.19.0.1:39439
   tadk run --install --logcat
   tadk run --release --build-only
   tadk run --clean -- --stacktrace
@@ -166,6 +169,22 @@ while (( $# > 0 )); do
             INSTALL_MODE="open"
             ;;
 
+        --device)
+            shift
+
+            (( $# > 0 )) ||
+                tadk_die "--device 缺少设备序列号"
+
+            DEVICE_SERIAL="$1"
+            ;;
+
+        --device=*)
+            DEVICE_SERIAL="${1#--device=}"
+
+            [[ -n "$DEVICE_SERIAL" ]] ||
+                tadk_die "--device 缺少设备序列号"
+            ;;
+
         --debug)
             BUILD_TYPE="debug"
             BUILD_TYPE_EXPLICIT=true
@@ -218,6 +237,14 @@ done
 
 if [[ "$FOLLOW_LOGCAT" == true && "$INSTALL_MODE" != "adb" ]]; then
     tadk_die "--logcat 必须与 --install 同时使用"
+fi
+
+if [[ -n "$DEVICE_SERIAL" && "$INSTALL_MODE" != "adb" ]]; then
+    tadk_die "--device 只能与 --install 模式同时使用"
+fi
+
+if [[ -n "$DEVICE_SERIAL" ]]; then
+    tadk_adb_set_serial "$DEVICE_SERIAL"
 fi
 
 PROJECT_ROOT="$(tadk_require_project_root)"
@@ -392,6 +419,7 @@ fi
 printf '类型：%s\n' "$BUILD_TYPE"
 printf '任务：%s\n' "$BUILD_TASK"
 printf '模式：%s\n' "$INSTALL_MODE"
+printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
 printf '日志：%s\n' "$FOLLOW_LOGCAT"
 printf '清理：%s\n' "$CLEAN_FIRST"
 

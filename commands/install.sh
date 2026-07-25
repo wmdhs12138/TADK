@@ -14,6 +14,7 @@ source "$TADK_ROOT/lib/adb.sh"
 BUILD_TYPE="debug"
 BUILD_TYPE_EXPLICIT=false
 APK_PATH=""
+DEVICE_SERIAL=""
 ALLOW_DOWNGRADE=false
 GRANT_PERMISSIONS=false
 REINSTALL=true
@@ -39,6 +40,7 @@ usage() {
   --debug            安装最新 Debug APK
   --release          安装最新 Release APK
   --apk PATH         安装指定 APK
+  --device SERIAL    指定 ADB 目标设备
   --no-reinstall     不使用 -r 覆盖安装
   --downgrade        允许版本降级，对应 adb install -d
   --grant            自动授予运行时权限，对应 adb install -g
@@ -58,6 +60,7 @@ usage() {
   tadk install --release
   tadk install ./app/build/outputs/apk/debug/app-debug.apk
   tadk install --apk ./my-app.apk
+  tadk install --device 172.19.0.1:39439
   tadk install --downgrade --grant
   tadk install -- --user 0
 HELP
@@ -143,6 +146,22 @@ while (( $# > 0 )); do
                 tadk_die "--apk 缺少路径参数"
             ;;
 
+        --device)
+            shift
+
+            (( $# > 0 )) ||
+                tadk_die "--device 缺少设备序列号"
+
+            DEVICE_SERIAL="$1"
+            ;;
+
+        --device=*)
+            DEVICE_SERIAL="${1#--device=}"
+
+            [[ -n "$DEVICE_SERIAL" ]] ||
+                tadk_die "--device 缺少设备序列号"
+            ;;
+
         --no-reinstall)
             REINSTALL=false
             ;;
@@ -187,6 +206,10 @@ while (( $# > 0 )); do
     shift
 done
 
+if [[ -n "$DEVICE_SERIAL" ]]; then
+    tadk_adb_set_serial "$DEVICE_SERIAL"
+fi
+
 if [[ -n "$APK_PATH" ]]; then
     RESOLVED_APK_PATH="$(resolve_explicit_apk)" ||
         tadk_die "APK 不存在或不是有效的 APK 文件：$APK_PATH"
@@ -221,6 +244,7 @@ tadk_separator
 printf 'APK：%s\n' "$RESOLVED_APK_PATH"
 printf '大小：%s\n' "${APK_SIZE:-未知}"
 printf '类型：%s\n' "$BUILD_TYPE"
+printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
 
 if [[ -n "$APK_PATH" ]]; then
     printf '来源：显式 APK 路径\n'
@@ -248,7 +272,7 @@ tadk_adb_require_device
 
 tadk_info "开始安装 APK"
 
-adb install \
+tadk_adb install \
     "${INSTALL_ARGS[@]}" \
     "$RESOLVED_APK_PATH"
 
