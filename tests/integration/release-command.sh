@@ -1115,7 +1115,7 @@ KEYGEN_KEYSTORE="$KEYGEN_DIRECTORY/production.p12"
 mkdir -p "$KEYGEN_DIRECTORY"
 
 export KEYGEN_STOREPASS='store-secret-123'
-export KEYGEN_KEYPASS='key-secret-456'
+export KEYGEN_KEYPASS='store-secret-123'
 
 : > "$MOCK_LOG"
 
@@ -1347,6 +1347,53 @@ assert_contains \
     "应识别重复的默认 keysize"
 
 printf 'PASS release keygen rejects duplicate default option\n\n'
+
+printf 'TEST release keygen rejects separate PKCS12 key password\n'
+
+PKCS12_MISMATCH="$TEST_ROOT/pkcs12-password-mismatch.p12"
+
+export KEYGEN_DIFFERENT_KEYPASS='different-key-secret'
+
+: > "$MOCK_LOG"
+
+set +e
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        keygen \
+        --keystore "$PKCS12_MISMATCH" \
+        --alias production \
+        --dname "CN=TADK Test, O=TADK, C=CA" \
+        --storepass-env KEYGEN_STOREPASS \
+        --keypass-env KEYGEN_DIFFERENT_KEYPASS \
+        --storetype PKCS12 \
+        2>&1
+)"
+command_status=$?
+set -e
+
+unset KEYGEN_DIFFERENT_KEYPASS
+
+assert_equals \
+    "64" \
+    "$command_status" \
+    "PKCS12 使用不同 key 密码时应返回用法错误"
+
+assert_contains \
+    "$output" \
+    "PKCS12 不支持独立的 key 密码" \
+    "应解释 PKCS12 密码限制"
+
+[[ ! -e "$PKCS12_MISMATCH" ]] ||
+    fail "密码配置无效时不得生成 keystore"
+
+calls="$(cat "$MOCK_LOG")"
+
+if [[ "$calls" == *"keytool"* ]]; then
+    fail "PKCS12 密码不一致时不应调用 keytool"
+fi
+
+printf 'PASS release keygen rejects separate PKCS12 key password\n\n'
 
 unset KEYGEN_STOREPASS
 unset KEYGEN_KEYPASS

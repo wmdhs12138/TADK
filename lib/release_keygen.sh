@@ -274,6 +274,13 @@ tadk_release_keygen_execute() {
         keypass_environment="$storepass_environment"
     fi
 
+    if [[ "$store_type" == PKCS12 &&
+          "${!storepass_environment}" != "${!keypass_environment}" ]]; then
+        tadk_error \
+            "PKCS12 不支持独立的 key 密码；两者必须相同"
+        return 64
+    fi
+
     tadk_require_command \
         keytool \
         "请安装完整 JDK"
