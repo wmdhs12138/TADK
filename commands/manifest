@@ -6,6 +6,7 @@ init|初始化现有 Android 项目的 TADK 配置|commands/init.sh
 config|查看和验证 Android 项目的 TADK 配置|commands/config.sh
 build|构建当前 Android 项目的 APK|commands/build.sh
 apk|查找和列出当前项目生成的 APK|commands/apk.sh
+release|检查和验证 Android Release 签名|commands/release.sh
 install|通过 ADB 安装已有 APK|commands/install.sh
 launch|通过 ADB 启动已安装的 Android 应用|commands/launch.sh
 logcat|查看当前 Android 应用的运行日志|commands/logcat.sh
