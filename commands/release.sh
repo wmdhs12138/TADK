@@ -12,6 +12,7 @@ source "$TADK_ROOT/lib/apk.sh"
 source "$TADK_ROOT/lib/release_setup.sh"
 source "$TADK_ROOT/lib/release_init.sh"
 source "$TADK_ROOT/lib/release_keygen.sh"
+source "$TADK_ROOT/lib/release_apply.sh"
 
 ACTION=""
 APK_ARGUMENT=""
@@ -42,6 +43,9 @@ KEYGEN_KEY_ALGORITHM_SET=false
 KEYGEN_KEY_SIZE_SET=false
 KEYGEN_VALIDITY_DAYS_SET=false
 KEYGEN_STORE_TYPE_SET=false
+APPLY_MODULE=""
+APPLY_FORCE=false
+APPLY_CHECK_ONLY=false
 
 usage() {
     cat <<'HELP'
@@ -53,6 +57,7 @@ usage() {
   tadk release setup [选项]
   tadk release init [选项]
   tadk release keygen [选项]
+  tadk release apply [选项]
 
 操作：
   doctor              检查 Android Release 签名验证环境
@@ -62,6 +67,7 @@ usage() {
   setup               生成安全的 Release 签名配置骨架
   init                创建本地 keystore.properties
   keygen              创建 Android Release keystore
+  apply               应用 Gradle Release 签名配置
 
 构建选项：
   --clean             构建前执行 Gradle clean
@@ -101,6 +107,11 @@ keygen 选项：
   --force             安全替换已有 keystore
   --verbose           显示 keytool 详细输出
 
+apply 选项：
+  --module MODULE     指定 Android 应用模块
+  --check             只检查签名配置是否已应用
+  --force             重新生成已有 TADK 签名配置块
+
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
   Release APK。如果存在 .tadk/project.conf，则只检查配置的 module。
@@ -108,10 +119,8 @@ keygen 选项：
   build 始终构建 Release APK，并复用 tadk build 的项目配置、
   模块解析和 Gradle 参数处理。构建成功后自动执行签名验证。
 
-  本命令不会：
-    - 创建或修改 keystore
-    - 读取或保存签名密码
-    - 修改 Gradle signingConfig
+  apply 只修改模块 Gradle 构建文件中的 TADK 标记块，不读取
+  keystore 密码，也不会创建或修改 keystore。
 
 示例：
   tadk release doctor
@@ -131,6 +140,9 @@ keygen 选项：
   tadk release keygen --keystore release.jks --alias release \
     --dname "CN=My App, O=Personal, C=CA" \
     --storepass-env TADK_STOREPASS
+  tadk release apply
+  tadk release apply --module app
+  tadk release apply --check
 HELP
 }
 
@@ -600,6 +612,74 @@ case "$ACTION" in
         )" || exit $?
 
         verify_apk_signature "$APK_PATH"
+        ;;
+
+    apply)
+        while (( $# > 0 )); do
+            case "$1" in
+                --module)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--module 缺少参数" 64
+
+                    [[ -z "$APPLY_MODULE" ]] ||
+                        tadk_die "--module 不能重复指定" 64
+
+                    APPLY_MODULE="$1"
+                    ;;
+
+                --module=*)
+                    [[ -z "$APPLY_MODULE" ]] ||
+                        tadk_die "--module 不能重复指定" 64
+
+                    APPLY_MODULE="${1#--module=}"
+
+                    [[ -n "$APPLY_MODULE" ]] ||
+                        tadk_die "--module 缺少参数" 64
+                    ;;
+
+                --check)
+                    [[ "$APPLY_CHECK_ONLY" == false ]] ||
+                        tadk_die "--check 不能重复指定" 64
+
+                    APPLY_CHECK_ONLY=true
+                    ;;
+
+                --force)
+                    [[ "$APPLY_FORCE" == false ]] ||
+                        tadk_die "--force 不能重复指定" 64
+
+                    APPLY_FORCE=true
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                *)
+                    tadk_die "apply 不支持参数：$1" 64
+                    ;;
+            esac
+
+            shift
+        done
+
+        if [[ "$APPLY_CHECK_ONLY" == true &&
+              "$APPLY_FORCE" == true ]]; then
+            tadk_die \
+                "--check 和 --force 不能同时使用" \
+                64
+        fi
+
+        PROJECT_ROOT="$(tadk_require_project_root)"
+
+        tadk_release_apply_execute \
+            "$APPLY_MODULE" \
+            "$APPLY_FORCE" \
+            "$APPLY_CHECK_ONLY" \
+            "$PROJECT_ROOT"
         ;;
 
     keygen)

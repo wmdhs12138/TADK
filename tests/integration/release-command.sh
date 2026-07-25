@@ -1398,4 +1398,449 @@ printf 'PASS release keygen rejects separate PKCS12 key password\n\n'
 unset KEYGEN_STOREPASS
 unset KEYGEN_KEYPASS
 
+
+printf 'TEST release apply configures Kotlin DSL project\n'
+
+APPLY_KOTLIN_PROJECT="$TEST_ROOT/release-apply-kotlin"
+APPLY_KOTLIN_BUILD="$APPLY_KOTLIN_PROJECT/app/build.gradle.kts"
+
+mkdir -p "$APPLY_KOTLIN_PROJECT/app"
+
+cat > "$APPLY_KOTLIN_PROJECT/gradlew" <<'GRADLEW'
+#!/data/data/com.termux/files/usr/bin/bash
+exit 0
+GRADLEW
+
+cat > "$APPLY_KOTLIN_PROJECT/settings.gradle.kts" <<'SETTINGS'
+rootProject.name = "ApplyKotlinFixture"
+include(":app")
+SETTINGS
+
+cat > "$APPLY_KOTLIN_BUILD" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "com.example.kotlin"
+    compileSdk = 36
+}
+BUILD
+
+chmod +x "$APPLY_KOTLIN_PROJECT/gradlew"
+
+original_mode="$(stat -c '%a' "$APPLY_KOTLIN_BUILD")"
+
+output="$(
+    cd "$APPLY_KOTLIN_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "已应用 Release 签名配置" \
+    "Kotlin DSL 项目应成功应用签名配置"
+
+assert_file_contains \
+    "$APPLY_KOTLIN_BUILD" \
+    "// TADK Release signing begin" \
+    "Kotlin 构建文件应包含开始标记"
+
+assert_file_contains \
+    "$APPLY_KOTLIN_BUILD" \
+    'java.util.Properties()' \
+    "Kotlin 配置应加载 keystore.properties"
+
+assert_file_contains \
+    "$APPLY_KOTLIN_BUILD" \
+    'maybeCreate("release")' \
+    "Kotlin 配置应创建或复用 release signingConfig"
+
+assert_file_contains \
+    "$APPLY_KOTLIN_BUILD" \
+    'signingConfigs.getByName("release")' \
+    "Kotlin release build type 应使用签名配置"
+
+updated_mode="$(stat -c '%a' "$APPLY_KOTLIN_BUILD")"
+
+assert_equals \
+    "$original_mode" \
+    "$updated_mode" \
+    "release apply 应保留 Gradle 文件权限"
+
+begin_count="$(
+    grep -Fxc \
+        "// TADK Release signing begin" \
+        "$APPLY_KOTLIN_BUILD"
+)"
+
+end_count="$(
+    grep -Fxc \
+        "// TADK Release signing end" \
+        "$APPLY_KOTLIN_BUILD"
+)"
+
+assert_equals \
+    "1" \
+    "$begin_count" \
+    "Kotlin 配置只能包含一个开始标记"
+
+assert_equals \
+    "1" \
+    "$end_count" \
+    "Kotlin 配置只能包含一个结束标记"
+
+printf 'PASS release apply configures Kotlin DSL project\n\n'
+
+printf 'TEST release apply check and idempotency\n'
+
+before_hash="$(sha256sum "$APPLY_KOTLIN_BUILD" | awk '{print $1}')"
+
+output="$(
+    cd "$APPLY_KOTLIN_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        --check \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "TADK Release 签名配置已应用" \
+    "--check 应确认已有配置"
+
+output="$(
+    cd "$APPLY_KOTLIN_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "已存在，无需修改" \
+    "重复 apply 应保持幂等"
+
+after_hash="$(sha256sum "$APPLY_KOTLIN_BUILD" | awk '{print $1}')"
+
+assert_equals \
+    "$before_hash" \
+    "$after_hash" \
+    "幂等 apply 不得修改 Gradle 文件"
+
+printf 'PASS release apply check and idempotency\n\n'
+
+printf 'TEST release apply force refreshes managed block\n'
+
+python - "$APPLY_KOTLIN_BUILD" <<'PY_EDIT'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace(
+    'val tadkReleaseKeystoreFile =',
+    '// stale managed content\nval tadkReleaseKeystoreFile =',
+    1,
+)
+path.write_text(text)
+PY_EDIT
+
+assert_file_contains \
+    "$APPLY_KOTLIN_BUILD" \
+    "stale managed content" \
+    "测试夹具应包含旧 TADK 内容"
+
+output="$(
+    cd "$APPLY_KOTLIN_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        --force \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "已应用 Release 签名配置" \
+    "--force 应重新生成 TADK 配置块"
+
+if grep -Fq \
+    "stale managed content" \
+    "$APPLY_KOTLIN_BUILD"; then
+    fail "--force 应移除旧 TADK 配置块内容"
+fi
+
+begin_count="$(
+    grep -Fxc \
+        "// TADK Release signing begin" \
+        "$APPLY_KOTLIN_BUILD"
+)"
+
+assert_equals \
+    "1" \
+    "$begin_count" \
+    "--force 后仍只能存在一个 TADK 配置块"
+
+printf 'PASS release apply force refreshes managed block\n\n'
+
+printf 'TEST release apply configures Groovy DSL project\n'
+
+APPLY_GROOVY_PROJECT="$TEST_ROOT/release-apply-groovy"
+APPLY_GROOVY_BUILD="$APPLY_GROOVY_PROJECT/mobile/build.gradle"
+
+mkdir -p "$APPLY_GROOVY_PROJECT/mobile"
+
+cat > "$APPLY_GROOVY_PROJECT/gradlew" <<'GRADLEW'
+#!/data/data/com.termux/files/usr/bin/bash
+exit 0
+GRADLEW
+
+cat > "$APPLY_GROOVY_PROJECT/settings.gradle" <<'SETTINGS'
+rootProject.name = "ApplyGroovyFixture"
+include ":mobile"
+SETTINGS
+
+cat > "$APPLY_GROOVY_BUILD" <<'BUILD'
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.example.groovy"
+    compileSdk 36
+}
+BUILD
+
+mkdir -p "$APPLY_GROOVY_PROJECT/.tadk"
+
+cat > "$APPLY_GROOVY_PROJECT/.tadk/project.conf" <<'CONFIG'
+version=1
+module=mobile
+variant=debug
+CONFIG
+
+chmod +x "$APPLY_GROOVY_PROJECT/gradlew"
+
+output="$(
+    cd "$APPLY_GROOVY_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "Gradle DSL：groovy" \
+    "应检测 Groovy DSL"
+
+assert_file_contains \
+    "$APPLY_GROOVY_BUILD" \
+    "new Properties()" \
+    "Groovy 配置应加载 properties"
+
+assert_file_contains \
+    "$APPLY_GROOVY_BUILD" \
+    'maybeCreate("release")' \
+    "Groovy 配置应创建或复用 release signingConfig"
+
+assert_file_contains \
+    "$APPLY_GROOVY_BUILD" \
+    "signingConfig signingConfigs.release" \
+    "Groovy release build type 应使用签名配置"
+
+printf 'PASS release apply configures Groovy DSL project\n\n'
+
+printf 'TEST release apply refuses unmanaged signing config\n'
+
+APPLY_EXISTING_PROJECT="$TEST_ROOT/release-apply-existing"
+APPLY_EXISTING_BUILD="$APPLY_EXISTING_PROJECT/app/build.gradle.kts"
+
+mkdir -p "$APPLY_EXISTING_PROJECT/app"
+
+cp "$APPLY_KOTLIN_PROJECT/gradlew" \
+    "$APPLY_EXISTING_PROJECT/gradlew"
+
+cp "$APPLY_KOTLIN_PROJECT/settings.gradle.kts" \
+    "$APPLY_EXISTING_PROJECT/settings.gradle.kts"
+
+cat > "$APPLY_EXISTING_BUILD" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    signingConfigs {
+        create("release") {
+            keyAlias = "existing"
+        }
+    }
+}
+BUILD
+
+chmod +x "$APPLY_EXISTING_PROJECT/gradlew"
+
+existing_hash="$(
+    sha256sum "$APPLY_EXISTING_BUILD" |
+        awk '{print $1}'
+)"
+
+set +e
+output="$(
+    cd "$APPLY_EXISTING_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "已有非 TADK signingConfig 时应拒绝修改"
+
+assert_contains \
+    "$output" \
+    "检测到已有 signingConfig，拒绝自动修改" \
+    "应说明拒绝已有签名配置"
+
+current_hash="$(
+    sha256sum "$APPLY_EXISTING_BUILD" |
+        awk '{print $1}'
+)"
+
+assert_equals \
+    "$existing_hash" \
+    "$current_hash" \
+    "拒绝操作时不得修改 Gradle 文件"
+
+printf 'PASS release apply refuses unmanaged signing config\n\n'
+
+printf 'TEST release apply rejects damaged markers\n'
+
+APPLY_DAMAGED_PROJECT="$TEST_ROOT/release-apply-damaged"
+APPLY_DAMAGED_BUILD="$APPLY_DAMAGED_PROJECT/app/build.gradle.kts"
+
+mkdir -p "$APPLY_DAMAGED_PROJECT/app"
+
+cp "$APPLY_KOTLIN_PROJECT/gradlew" \
+    "$APPLY_DAMAGED_PROJECT/gradlew"
+
+cp "$APPLY_KOTLIN_PROJECT/settings.gradle.kts" \
+    "$APPLY_DAMAGED_PROJECT/settings.gradle.kts"
+
+cat > "$APPLY_DAMAGED_BUILD" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+// TADK Release signing end
+android {
+    namespace = "com.example.damaged"
+}
+// TADK Release signing begin
+BUILD
+
+chmod +x "$APPLY_DAMAGED_PROJECT/gradlew"
+
+damaged_hash="$(
+    sha256sum "$APPLY_DAMAGED_BUILD" |
+        awk '{print $1}'
+)"
+
+set +e
+output="$(
+    cd "$APPLY_DAMAGED_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        --force \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "标记顺序损坏时应拒绝修改"
+
+assert_contains \
+    "$output" \
+    "标记不完整、重复或顺序错误" \
+    "应说明 TADK 标记损坏"
+
+current_hash="$(
+    sha256sum "$APPLY_DAMAGED_BUILD" |
+        awk '{print $1}'
+)"
+
+assert_equals \
+    "$damaged_hash" \
+    "$current_hash" \
+    "标记损坏时不得修改 Gradle 文件"
+
+printf 'PASS release apply rejects damaged markers\n\n'
+
+printf 'TEST release apply check fails before configuration\n'
+
+APPLY_UNCONFIGURED_PROJECT="$TEST_ROOT/release-apply-unconfigured"
+
+mkdir -p "$APPLY_UNCONFIGURED_PROJECT/app"
+
+cp "$APPLY_KOTLIN_PROJECT/gradlew" \
+    "$APPLY_UNCONFIGURED_PROJECT/gradlew"
+
+cp "$APPLY_KOTLIN_PROJECT/settings.gradle.kts" \
+    "$APPLY_UNCONFIGURED_PROJECT/settings.gradle.kts"
+
+cat > "$APPLY_UNCONFIGURED_PROJECT/app/build.gradle.kts" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "com.example.unconfigured"
+}
+BUILD
+
+chmod +x "$APPLY_UNCONFIGURED_PROJECT/gradlew"
+
+set +e
+output="$(
+    cd "$APPLY_UNCONFIGURED_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        apply \
+        --check \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "未应用配置时 --check 应失败"
+
+assert_contains \
+    "$output" \
+    "TADK Release 签名配置尚未应用" \
+    "--check 应说明配置尚未应用"
+
+printf 'PASS release apply check fails before configuration\n\n'
+
 printf 'PASS: release command integration\n'
