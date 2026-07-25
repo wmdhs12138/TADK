@@ -13,6 +13,9 @@ source "$TADK_ROOT/lib/apk.sh"
 ACTION=""
 APK_ARGUMENT=""
 RELEASE_BUILD_ARGS=()
+KEYSTORE_ARGUMENT=""
+KEYSTORE_ALIAS=""
+KEYSTORE_PASSWORD_ENV=""
 
 usage() {
     cat <<'HELP'
@@ -20,17 +23,23 @@ usage() {
   tadk release doctor
   tadk release verify [APK]
   tadk release build [构建选项]
+  tadk release keystore KEYSTORE [选项]
 
 操作：
   doctor              检查 Android Release 签名验证环境
   verify [APK]        验证 APK 签名、证书和文件摘要
   build               构建 Release APK 并验证签名
+  keystore            检查 keystore 内容和签名证书
 
 构建选项：
   --clean             构建前执行 Gradle clean
   --no-cache          禁用 Gradle 构建缓存
   --rerun             强制重新执行 Gradle 任务
   --                  将后续参数直接传递给 Gradle
+
+keystore 选项：
+  --alias ALIAS       只检查指定的 keystore 条目
+  --storepass-env VAR 从环境变量 VAR 读取 keystore 密码
 
 说明：
   verify 未指定 APK 时，将在当前 Android 项目中查找最新的
@@ -51,6 +60,10 @@ usage() {
   tadk release build
   tadk release build --clean
   tadk release build -- --stacktrace
+  tadk release keystore release.jks
+  tadk release keystore release.jks --alias production
+  TADK_STOREPASS=secret tadk release keystore release.jks \
+    --storepass-env TADK_STOREPASS
 HELP
 }
 
@@ -234,6 +247,148 @@ resolve_verify_apk() {
     printf '%s\n' "$resolved_path"
 }
 
+validate_environment_name() {
+    if (( $# != 1 )); then
+        tadk_error \
+            "内部错误：validate_environment_name 需要变量名"
+        return 64
+    fi
+
+    case "$1" in
+        [A-Za-z_][A-Za-z0-9_]*)
+            return 0
+            ;;
+
+        *)
+            return 1
+            ;;
+    esac
+}
+
+resolve_keystore_path() {
+    if (( $# != 1 )); then
+        tadk_error \
+            "内部错误：resolve_keystore_path 需要路径"
+        return 64
+    fi
+
+    local requested_path="$1"
+    local resolved_path=""
+
+    resolved_path="$(
+        tadk_absolute_path "$requested_path"
+    )" || {
+        tadk_error "无法解析 keystore 路径：$requested_path"
+        return 1
+    }
+
+    [[ -f "$resolved_path" ]] || {
+        tadk_error "keystore 不存在：$resolved_path"
+        return 1
+    }
+
+    [[ -r "$resolved_path" ]] || {
+        tadk_error "keystore 不可读：$resolved_path"
+        return 1
+    }
+
+    printf '%s\n' "$resolved_path"
+}
+
+inspect_keystore() {
+    if (( $# != 1 )); then
+        tadk_error \
+            "内部错误：inspect_keystore 需要 keystore 路径"
+        return 64
+    fi
+
+    local keystore_path="$1"
+    local keytool_args=(
+        -list
+        -v
+        -keystore "$keystore_path"
+    )
+    local keytool_status=0
+    local keystore_size=""
+    local keystore_sha256=""
+
+    tadk_require_command \
+        keytool \
+        "请安装完整 JDK"
+
+    tadk_require_command \
+        sha256sum \
+        "请执行：pkg install coreutils"
+
+    if [[ -n "$KEYSTORE_ALIAS" ]]; then
+        keytool_args+=(
+            -alias "$KEYSTORE_ALIAS"
+        )
+    fi
+
+    if [[ -n "$KEYSTORE_PASSWORD_ENV" ]]; then
+        validate_environment_name "$KEYSTORE_PASSWORD_ENV" || {
+            tadk_error \
+                "无效的环境变量名称：$KEYSTORE_PASSWORD_ENV"
+            return 64
+        }
+
+        [[ -v "$KEYSTORE_PASSWORD_ENV" ]] || {
+            tadk_error \
+                "环境变量未设置：$KEYSTORE_PASSWORD_ENV"
+            return 1
+        }
+
+        [[ -n "${!KEYSTORE_PASSWORD_ENV}" ]] || {
+            tadk_error \
+                "环境变量为空：$KEYSTORE_PASSWORD_ENV"
+            return 1
+        }
+
+        keytool_args+=(
+            -storepass:env "$KEYSTORE_PASSWORD_ENV"
+        )
+    fi
+
+    tadk_heading "TADK Release Keystore"
+    tadk_separator
+    printf 'keystore：%s\n' "$keystore_path"
+
+    if [[ -n "$KEYSTORE_ALIAS" ]]; then
+        printf 'alias：%s\n' "$KEYSTORE_ALIAS"
+    else
+        printf 'alias：全部条目\n'
+    fi
+
+    if [[ -n "$KEYSTORE_PASSWORD_ENV" ]]; then
+        printf '密码来源：环境变量 %s\n' \
+            "$KEYSTORE_PASSWORD_ENV"
+    else
+        printf '密码来源：未提供，keytool 可能请求交互输入\n'
+    fi
+
+    keystore_size="$(tadk_apk_size "$keystore_path" || true)"
+    printf '大小：%s\n' "${keystore_size:-未知}"
+    tadk_separator
+
+    if keytool "${keytool_args[@]}"; then
+        keytool_status=0
+    else
+        keytool_status=$?
+        tadk_error "keystore 检查失败"
+        return "$keytool_status"
+    fi
+
+    keystore_sha256="$(
+        sha256sum "$keystore_path" |
+            awk '{print $1}'
+    )"
+
+    tadk_separator
+    printf 'SHA-256：%s\n' "$keystore_sha256"
+    tadk_success "keystore 可访问，证书信息读取成功"
+}
+
 release_build() {
     local build_status=0
     local apk_path=""
@@ -384,6 +539,88 @@ case "$ACTION" in
         )" || exit $?
 
         verify_apk_signature "$APK_PATH"
+        ;;
+
+    keystore)
+        while (( $# > 0 )); do
+            case "$1" in
+                --alias)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--alias 缺少参数" 64
+
+                    [[ -z "$KEYSTORE_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+
+                    KEYSTORE_ALIAS="$1"
+                    ;;
+
+                --alias=*)
+                    [[ -z "$KEYSTORE_ALIAS" ]] ||
+                        tadk_die "--alias 不能重复指定" 64
+
+                    KEYSTORE_ALIAS="${1#--alias=}"
+
+                    [[ -n "$KEYSTORE_ALIAS" ]] ||
+                        tadk_die "--alias 缺少参数" 64
+                    ;;
+
+                --storepass-env)
+                    shift
+
+                    (( $# > 0 )) ||
+                        tadk_die "--storepass-env 缺少参数" 64
+
+                    [[ -z "$KEYSTORE_PASSWORD_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" 64
+
+                    KEYSTORE_PASSWORD_ENV="$1"
+                    ;;
+
+                --storepass-env=*)
+                    [[ -z "$KEYSTORE_PASSWORD_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 不能重复指定" 64
+
+                    KEYSTORE_PASSWORD_ENV="${1#--storepass-env=}"
+
+                    [[ -n "$KEYSTORE_PASSWORD_ENV" ]] ||
+                        tadk_die \
+                            "--storepass-env 缺少参数" 64
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                -*)
+                    tadk_die \
+                        "keystore 不支持参数：$1" 64
+                    ;;
+
+                *)
+                    [[ -z "$KEYSTORE_ARGUMENT" ]] ||
+                        tadk_die \
+                            "keystore 只接受一个文件路径" 64
+
+                    KEYSTORE_ARGUMENT="$1"
+                    ;;
+            esac
+
+            shift
+        done
+
+        [[ -n "$KEYSTORE_ARGUMENT" ]] ||
+            tadk_die "keystore 缺少文件路径" 64
+
+        KEYSTORE_PATH="$(
+            resolve_keystore_path "$KEYSTORE_ARGUMENT"
+        )" || exit $?
+
+        inspect_keystore "$KEYSTORE_PATH"
         ;;
 
     build)
