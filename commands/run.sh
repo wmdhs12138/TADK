@@ -98,7 +98,9 @@ run_adb_launch() {
 
     if [[ -n "$module" ]]; then
         package_name="$(
-            tadk_android_module_package_name                 "$project_root"                 "$module" ||
+            tadk_android_module_package_name \
+                "$project_root" \
+                "$module" ||
             true
         )"
     else
@@ -284,7 +286,9 @@ run_step_adb_install() {
 }
 
 run_step_adb_launch() {
-    run_adb_launch         "$PROJECT_ROOT"         "$PROJECT_MODULE"
+    run_adb_launch \
+        "$PROJECT_ROOT" \
+        "$PROJECT_MODULE"
 }
 
 run_step_complete() {
