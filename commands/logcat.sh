@@ -85,9 +85,9 @@ resolve_package_name() {
             "$project_root" \
             "$TADK_CONFIG_MODULE"
         return $?
+    else
+        config_status=$?
     fi
-
-    config_status=$?
 
     if (( config_status != 1 )); then
         tadk_error \
