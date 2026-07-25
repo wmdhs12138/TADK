@@ -18,6 +18,7 @@ BUILD_TYPE="debug"
 BUILD_TYPE_EXPLICIT=false
 INSTALL_MODE="open"
 CLEAN_FIRST=false
+FOLLOW_LOGCAT=false
 GRADLE_EXTRA_ARGS=()
 
 PROJECT_ROOT=""
@@ -28,6 +29,7 @@ BUILD_TASK=""
 BUILD_DURATION=""
 APK_PATH=""
 APK_SIZE=""
+RUN_PACKAGE_NAME=""
 
 usage() {
     cat <<'HELP'
@@ -47,6 +49,7 @@ usage() {
   --debug            构建 Debug APK
   --release          构建 Release APK
   --clean            构建前先执行 Gradle clean
+  --logcat           安装并启动后进入应用日志
   --no-cache         禁用 Gradle 构建缓存
   --rerun            强制重新执行所有 Gradle 任务
   --                  将后续参数直接传递给 Gradle
@@ -61,6 +64,7 @@ usage() {
   tadk run
   tadk run --build-only
   tadk run --install
+  tadk run --install --logcat
   tadk run --release --build-only
   tadk run --clean -- --stacktrace
 HELP
@@ -86,6 +90,26 @@ run_adb_install() {
     tadk_success "ADB 安装成功"
 }
 
+run_resolve_package_name() {
+    if (( $# != 2 )); then
+        tadk_error \
+            "内部错误：run_resolve_package_name 需要 PROJECT_ROOT MODULE"
+        return 64
+    fi
+
+    local project_root="$1"
+    local module="$2"
+
+    if [[ -n "$module" ]]; then
+        tadk_android_module_package_name \
+            "$project_root" \
+            "$module"
+        return $?
+    fi
+
+    tadk_android_package_name "$project_root"
+}
+
 run_adb_launch() {
     if (( $# != 2 )); then
         tadk_error "内部错误：run_adb_launch 需要 PROJECT_ROOT MODULE"
@@ -94,34 +118,38 @@ run_adb_launch() {
 
     local project_root="$1"
     local module="$2"
-    local package_name=""
 
-    if [[ -n "$module" ]]; then
-        package_name="$(
-            tadk_android_module_package_name \
-                "$project_root" \
-                "$module" ||
-            true
-        )"
-    else
-        package_name="$(
-            tadk_android_package_name "$project_root" ||
-            true
-        )"
-    fi
+    RUN_PACKAGE_NAME="$(
+        run_resolve_package_name \
+            "$project_root" \
+            "$module" ||
+        true
+    )"
 
-    if [[ -z "$package_name" ]]; then
+    if [[ -z "$RUN_PACKAGE_NAME" ]]; then
+        if [[ "$FOLLOW_LOGCAT" == true ]]; then
+            tadk_error \
+                "无法识别 applicationId，不能进入应用日志"
+            return 1
+        fi
+
         tadk_warn "无法识别 applicationId，已跳过启动"
         return 0
     fi
 
-    tadk_info "尝试启动 $package_name"
+    tadk_info "尝试启动 $RUN_PACKAGE_NAME"
 
-    if tadk_adb_launch_package "$package_name" >/dev/null; then
+    if tadk_adb_launch_package "$RUN_PACKAGE_NAME" >/dev/null; then
         tadk_success "应用已启动"
-    else
-        tadk_warn "APK 已安装，但自动启动失败"
+        return 0
     fi
+
+    if [[ "$FOLLOW_LOGCAT" == true ]]; then
+        tadk_error "APK 已安装，但自动启动失败"
+        return 1
+    fi
+
+    tadk_warn "APK 已安装，但自动启动失败"
 }
 
 while (( $# > 0 )); do
@@ -150,6 +178,10 @@ while (( $# > 0 )); do
 
         --clean)
             CLEAN_FIRST=true
+            ;;
+
+        --logcat)
+            FOLLOW_LOGCAT=true
             ;;
 
         --no-cache)
@@ -183,6 +215,10 @@ while (( $# > 0 )); do
 
     shift
 done
+
+if [[ "$FOLLOW_LOGCAT" == true && "$INSTALL_MODE" != "adb" ]]; then
+    tadk_die "--logcat 必须与 --install 同时使用"
+fi
 
 PROJECT_ROOT="$(tadk_require_project_root)"
 
@@ -230,6 +266,10 @@ run_should_open_installer() {
 
 run_should_adb_install() {
     [[ "$INSTALL_MODE" == "adb" ]]
+}
+
+run_should_follow_logcat() {
+    [[ "$FOLLOW_LOGCAT" == true ]]
 }
 
 run_step_build() {
@@ -291,6 +331,18 @@ run_step_adb_launch() {
         "$PROJECT_MODULE"
 }
 
+run_step_logcat() {
+    [[ -n "$RUN_PACKAGE_NAME" ]] ||
+        tadk_die "无法识别应用包名，不能进入日志"
+
+    printf '\n'
+    tadk_info "进入应用日志，按 Ctrl+C 停止"
+
+    "$TADK_ROOT/commands/logcat.sh" \
+        --package "$RUN_PACKAGE_NAME" \
+        --launch
+}
+
 run_step_complete() {
     printf '\n完成。\n'
 }
@@ -319,6 +371,11 @@ workflow_register_if \
     run_should_adb_install \
     run_step_adb_launch
 
+workflow_register_if \
+    logcat \
+    run_should_follow_logcat \
+    run_step_logcat
+
 workflow_register complete run_step_complete
 
 tadk_heading "TADK Run"
@@ -335,6 +392,7 @@ fi
 printf '类型：%s\n' "$BUILD_TYPE"
 printf '任务：%s\n' "$BUILD_TASK"
 printf '模式：%s\n' "$INSTALL_MODE"
+printf '日志：%s\n' "$FOLLOW_LOGCAT"
 printf '清理：%s\n' "$CLEAN_FIRST"
 
 if (( ${#GRADLE_EXTRA_ARGS[@]} > 0 )); then
@@ -354,4 +412,5 @@ workflow_run \
     open-installer \
     adb-install \
     adb-launch \
+    logcat \
     complete
