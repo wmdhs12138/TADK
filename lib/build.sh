@@ -113,23 +113,36 @@ tadk_build_run_task() {
     )
 }
 
-tadk_build_execute() {
+tadk_build_execute_task() {
+    if (( $# < 4 )); then
+        return 64
+    fi
+
     local project_root="$1"
     local build_type="$2"
     local clean_first="$3"
-    shift 3
+    local build_task="$4"
+    shift 4
 
     local gradlew=""
-    local build_task=""
     local start_time=""
     local end_time=""
 
     tadk_build_validate_type "$build_type" ||
         tadk_die "不支持的构建类型：$build_type"
 
+    [[ -n "$build_task" ]] ||
+        tadk_die "Gradle 构建任务不能为空"
+
+    case "$clean_first" in
+        true|false)
+            ;;
+        *)
+            tadk_die "无效的清理选项：$clean_first"
+            ;;
+    esac
+
     gradlew="$(tadk_build_require_gradlew "$project_root")"
-    build_task="$(tadk_build_task "$build_type")" ||
-        tadk_die "无法确定 Gradle 构建任务"
 
     if [[ "$clean_first" == true ]]; then
         tadk_info "清理项目" >&2
@@ -155,4 +168,27 @@ tadk_build_execute() {
     end_time="$(date +%s)"
 
     printf '%s\n' "$((end_time - start_time))"
+}
+
+tadk_build_execute() {
+    if (( $# < 3 )); then
+        return 64
+    fi
+
+    local project_root="$1"
+    local build_type="$2"
+    local clean_first="$3"
+    shift 3
+
+    local build_task=""
+
+    build_task="$(tadk_build_task "$build_type")" ||
+        tadk_die "无法确定 Gradle 构建任务"
+
+    tadk_build_execute_task \
+        "$project_root" \
+        "$build_type" \
+        "$clean_first" \
+        "$build_task" \
+        "$@"
 }
