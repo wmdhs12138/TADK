@@ -102,6 +102,41 @@ tadk_release_setup_detect_dsl() {
     return 1
 }
 
+tadk_release_setup_preflight_targets() {
+    if (( $# < 2 )); then
+        tadk_error \
+            "内部错误：setup 目标预检需要覆盖选项和目标路径"
+        return 64
+    fi
+
+    local force="$1"
+    shift
+
+    local target_path=""
+
+    case "$force" in
+        true|false)
+            ;;
+        *)
+            tadk_error "内部错误：无效的覆盖选项：$force"
+            return 64
+            ;;
+    esac
+
+    if [[ "$force" == true ]]; then
+        return 0
+    fi
+
+    for target_path in "$@"; do
+        if [[ -e "$target_path" ]]; then
+            tadk_error "文件已存在，不会覆盖：$target_path"
+            tadk_error \
+                "确认覆盖时请使用：tadk release setup --force"
+            return 1
+        fi
+    done
+}
+
 tadk_release_setup_write_properties_example() {
     if (( $# != 2 )); then
         tadk_error \
@@ -319,8 +354,6 @@ tadk_release_setup_execute() {
             "$module"
     )" || return $?
 
-    mkdir -p "$tadk_directory"
-
     case "$dsl" in
         kotlin)
             snippet_path="$tadk_directory/release-signing-snippet.gradle.kts"
@@ -336,6 +369,12 @@ tadk_release_setup_execute() {
             ;;
     esac
 
+    tadk_release_setup_preflight_targets \
+        "$force" \
+        "$properties_path" \
+        "$snippet_path" ||
+        return $?
+
     tadk_heading "TADK Release Setup"
     tadk_separator
     printf '项目：%s\n' "$project_root"
@@ -343,6 +382,8 @@ tadk_release_setup_execute() {
     printf 'Gradle DSL：%s\n' "$dsl"
     printf '覆盖已有模板：%s\n' "$force"
     tadk_separator
+
+    mkdir -p "$tadk_directory"
 
     tadk_release_setup_write_properties_example \
         "$properties_path" \
