@@ -19,6 +19,7 @@ CLEAR_FIRST=false
 CLEAR_ONLY=false
 DUMP_MODE=false
 RAW_OUTPUT=false
+AUTO_LAUNCH=false
 FORMAT="threadtime"
 LINES=""
 EXTRA_ARGS=()
@@ -42,6 +43,7 @@ usage() {
   --dump             输出当前日志后退出，不持续监听
   --lines NUMBER     只输出最近指定行数，并退出
   --format FORMAT    设置日志格式，默认 threadtime
+  --launch           应用未运行时自动启动并等待进程
   --raw-output       不输出 TADK 标题，便于重定向或交给 AI
   --                 后续参数直接传递给 adb logcat
   -h, --help         显示帮助
@@ -62,6 +64,7 @@ usage() {
   tadk logcat --dump
   tadk logcat --lines 100
   tadk logcat --package com.example.app
+  tadk logcat --launch
   tadk logcat --all
   tadk logcat --crash
   tadk logcat --raw-output --lines 200 > app.log
@@ -96,6 +99,62 @@ resolve_package_name() {
     fi
 
     tadk_android_package_name "$project_root"
+}
+
+resolve_package_pid() {
+    if (( $# != 1 )); then
+        tadk_error \
+            "内部错误：resolve_package_pid 需要 PACKAGE_NAME"
+        return 64
+    fi
+
+    local package_name="$1"
+    local package_pid=""
+    local attempt=0
+    local max_attempts=20
+
+    package_pid="$(
+        tadk_adb_package_pid "$package_name" ||
+        true
+    )"
+
+    if [[ -n "$package_pid" ]]; then
+        printf '%s\n' "$package_pid"
+        return 0
+    fi
+
+    if [[ "$AUTO_LAUNCH" != true ]]; then
+        return 1
+    fi
+
+    if [[ "$RAW_OUTPUT" == false ]]; then
+        tadk_info \
+            "应用未运行，正在启动：$package_name" \
+            >&2
+    fi
+
+    if ! tadk_adb_launch_package "$package_name" >/dev/null; then
+        tadk_error "应用启动失败：$package_name"
+        return 1
+    fi
+
+    while (( attempt < max_attempts )); do
+        package_pid="$(
+            tadk_adb_package_pid "$package_name" ||
+            true
+        )"
+
+        if [[ -n "$package_pid" ]]; then
+            printf '%s\n' "$package_pid"
+            return 0
+        fi
+
+        sleep 0.25
+        ((attempt += 1))
+    done
+
+    tadk_error "等待应用进程超时：$package_name"
+    return 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -160,6 +219,10 @@ while [[ $# -gt 0 ]]; do
             FORMAT="${1#--format=}"
             ;;
 
+        --launch)
+            AUTO_LAUNCH=true
+            ;;
+
         --raw-output)
             RAW_OUTPUT=true
             ;;
@@ -204,6 +267,18 @@ fi
 
 if [[ "$CRASH_MODE" == true && "$SHOW_ALL" == true ]]; then
     tadk_die "--crash 已经读取整个 crash 缓冲区，无需同时使用 --all"
+fi
+
+if [[ "$AUTO_LAUNCH" == true && "$SHOW_ALL" == true ]]; then
+    tadk_die "--launch 不能与 --all 同时使用"
+fi
+
+if [[ "$AUTO_LAUNCH" == true && "$CRASH_MODE" == true ]]; then
+    tadk_die "--launch 不能与 --crash 同时使用"
+fi
+
+if [[ "$AUTO_LAUNCH" == true && "$CLEAR_ONLY" == true ]]; then
+    tadk_die "--launch 不能与 --clear-only 同时使用"
 fi
 
 tadk_adb_require_device
@@ -288,11 +363,19 @@ RESOLVED_PACKAGE_NAME="$(
     "无法识别应用包名，请使用：tadk logcat --package <包名>"
 
 PACKAGE_PID="$(
-    tadk_adb_package_pid \
+    resolve_package_pid \
         "$RESOLVED_PACKAGE_NAME"
-)" || tadk_die \
-    "应用当前未运行：$RESOLVED_PACKAGE_NAME
-请先执行：tadk launch"
+)" || {
+    if [[ "$AUTO_LAUNCH" == true ]]; then
+        tadk_die \
+            "无法启动或获取应用进程：$RESOLVED_PACKAGE_NAME"
+    fi
+
+    tadk_die \
+        "应用当前未运行：$RESOLVED_PACKAGE_NAME
+请执行：tadk logcat --launch
+或先执行：tadk launch"
+}
 
 if [[ "$RAW_OUTPUT" == false ]]; then
     tadk_heading "TADK Logcat"
