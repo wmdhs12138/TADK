@@ -83,6 +83,60 @@ assert_contains \
     "--launch 后应用应处于运行状态"
 
 mock_env_reset_log
+: > "$MOCK_RUNNING_PACKAGES_FILE"
+mock_env_install_package "$PACKAGE_NAME"
+
+(
+    sleep 0.5
+    printf '%s\n' \
+        "$PACKAGE_NAME" \
+        >> "$MOCK_RUNNING_PACKAGES_FILE"
+) &
+wait_starter_pid=$!
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --wait \
+        --lines 5 \
+        2>&1
+)"
+
+wait "$wait_starter_pid"
+
+assert_contains \
+    "$output" \
+    "等待应用启动" \
+    "--wait 应说明正在等待应用"
+
+assert_contains \
+    "$output" \
+    "mock log" \
+    "--wait 检测到进程后应输出日志"
+
+calls="$(cat "$MOCK_LOG")"
+
+assert_contains \
+    "$calls" \
+    "adb shell pidof $PACKAGE_NAME" \
+    "--wait 应轮询应用 PID"
+
+assert_contains \
+    "$calls" \
+    "adb logcat --pid=12345" \
+    "--wait 应按检测到的 PID 读取日志"
+
+assert_not_contains \
+    "$calls" \
+    "adb shell monkey" \
+    "--wait 不应主动启动应用"
+
+assert_not_contains \
+    "$calls" \
+    "adb shell am force-stop" \
+    "--wait 不应停止应用"
+
+mock_env_reset_log
 mock_env_start_package "$PACKAGE_NAME"
 
 output="$(
@@ -336,5 +390,49 @@ assert_contains \
     "$output" \
     "--restart 不能与 --clear-only 同时使用" \
     "应显示 restart 与 clear-only 冲突"
+
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --wait \
+        --launch \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--wait 与 --launch 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--wait 不能与 --launch 或 --restart 同时使用" \
+    "应显示 wait 与 launch 冲突"
+
+set +e
+
+output="$(
+    "$TADK_ROOT/bin/tadk" \
+        logcat \
+        --wait \
+        --all \
+        2>&1
+)"
+exit_code=$?
+
+set -e
+
+assert_failure \
+    "$exit_code" \
+    "--wait 与 --all 同时使用应失败"
+
+assert_contains \
+    "$output" \
+    "--wait 不能与 --all 同时使用" \
+    "应显示 wait 与 all 冲突"
 
 printf 'PASS: logcat command integration\n'

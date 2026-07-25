@@ -21,6 +21,7 @@ DUMP_MODE=false
 RAW_OUTPUT=false
 AUTO_LAUNCH=false
 RESTART_APP=false
+WAIT_FOR_APP=false
 FORMAT="threadtime"
 LINES=""
 EXTRA_ARGS=()
@@ -46,6 +47,7 @@ usage() {
   --format FORMAT    设置日志格式，默认 threadtime
   --launch           应用未运行时自动启动并等待进程
   --restart          强制停止后重新启动应用并等待进程
+  --wait             等待应用由用户或外部事件启动
   --raw-output       不输出 TADK 标题，便于重定向或交给 AI
   --                 后续参数直接传递给 adb logcat
   -h, --help         显示帮助
@@ -68,6 +70,7 @@ usage() {
   tadk logcat --package com.example.app
   tadk logcat --launch
   tadk logcat --restart --clear
+  tadk logcat --wait
   tadk logcat --all
   tadk logcat --crash
   tadk logcat --raw-output --lines 200 > app.log
@@ -124,6 +127,30 @@ resolve_package_pid() {
     if [[ -n "$package_pid" ]]; then
         printf '%s\n' "$package_pid"
         return 0
+    fi
+
+    if [[ "$WAIT_FOR_APP" == true ]]; then
+        if [[ "$RAW_OUTPUT" == false ]]; then
+            tadk_info \
+                "等待应用启动：$package_name" \
+                >&2
+            printf '请在设备上启动应用，按 Ctrl+C 取消。\n' \
+                >&2
+        fi
+
+        while true; do
+            package_pid="$(
+                tadk_adb_package_pid "$package_name" ||
+                true
+            )"
+
+            if [[ -n "$package_pid" ]]; then
+                printf '%s\n' "$package_pid"
+                return 0
+            fi
+
+            sleep 0.25
+        done
     fi
 
     if [[ "$AUTO_LAUNCH" != true ]]; then
@@ -231,6 +258,10 @@ while [[ $# -gt 0 ]]; do
             AUTO_LAUNCH=true
             ;;
 
+        --wait)
+            WAIT_FOR_APP=true
+            ;;
+
         --raw-output)
             RAW_OUTPUT=true
             ;;
@@ -305,6 +336,22 @@ if [[ "$AUTO_LAUNCH" == true &&
       "$RESTART_APP" == false &&
       "$CLEAR_ONLY" == true ]]; then
     tadk_die "--launch 不能与 --clear-only 同时使用"
+fi
+
+if [[ "$WAIT_FOR_APP" == true && "$AUTO_LAUNCH" == true ]]; then
+    tadk_die "--wait 不能与 --launch 或 --restart 同时使用"
+fi
+
+if [[ "$WAIT_FOR_APP" == true && "$SHOW_ALL" == true ]]; then
+    tadk_die "--wait 不能与 --all 同时使用"
+fi
+
+if [[ "$WAIT_FOR_APP" == true && "$CRASH_MODE" == true ]]; then
+    tadk_die "--wait 不能与 --crash 同时使用"
+fi
+
+if [[ "$WAIT_FOR_APP" == true && "$CLEAR_ONLY" == true ]]; then
+    tadk_die "--wait 不能与 --clear-only 同时使用"
 fi
 
 tadk_adb_require_device
@@ -410,6 +457,11 @@ PACKAGE_PID="$(
     resolve_package_pid \
         "$RESOLVED_PACKAGE_NAME"
 )" || {
+    if [[ "$WAIT_FOR_APP" == true ]]; then
+        tadk_die \
+            "等待应用进程失败：$RESOLVED_PACKAGE_NAME"
+    fi
+
     if [[ "$AUTO_LAUNCH" == true ]]; then
         tadk_die \
             "无法启动或获取应用进程：$RESOLVED_PACKAGE_NAME"
