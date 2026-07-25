@@ -84,6 +84,7 @@ case_help_succeeds() {
     assert_contains "$output" \
         'tadk init [选项] [PROJECT_ROOT]'
     assert_contains "$output" '--force'
+    assert_contains "$output" '--module MODULE'
     assert_contains "$output" '.tadk/project.conf'
 }
 
@@ -169,6 +170,47 @@ case_explicit_project_root_creates_config() {
     assert_contains "$output" '覆盖：false'
     assert_contains "$output" 'Module: app'
     assert_contains "$output" 'Variant: debug'
+}
+
+case_explicit_module_is_selected() {
+    local root output config status=0
+
+    new_case_root
+    root="$CASE_ROOT"
+
+    create_project "$root" app
+
+    mkdir -p "$root/mobile/src/main"
+    cat > "$root/mobile/build.gradle.kts" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+BUILD
+
+    output="$(
+        "$TADK_ROOT/bin/tadk" init --module mobile "$root" 2>&1
+    )" || status=$?
+
+    assert_success "$status"
+    config="$(cat "$root/.tadk/project.conf")"
+    assert_contains "$config" 'module=mobile'
+    assert_contains "$output" 'Module: mobile'
+}
+
+case_nested_module_is_detected() {
+    local root config status=0
+
+    new_case_root
+    root="$CASE_ROOT"
+
+    create_project "$root" feature/chat
+
+    "$TADK_ROOT/bin/tadk" init "$root" >/dev/null 2>&1 ||
+        status=$?
+
+    assert_success "$status"
+    config="$(cat "$root/.tadk/project.conf")"
+    assert_contains "$config" 'module=feature/chat'
 }
 
 case_nested_directory_resolves_project_root() {
@@ -305,6 +347,14 @@ run_case \
 run_case \
     'explicit project root creates config' \
     case_explicit_project_root_creates_config
+
+run_case \
+    'explicit module is selected' \
+    case_explicit_module_is_selected
+
+run_case \
+    'nested module is detected' \
+    case_nested_module_is_detected
 
 run_case \
     'nested directory resolves project root' \

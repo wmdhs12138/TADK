@@ -11,6 +11,7 @@ source "$TADK_ROOT/lib/init.sh"
 
 FORCE=false
 PROJECT_PATH=""
+MODULE=""
 
 usage() {
     cat <<'HELP'
@@ -24,6 +25,7 @@ usage() {
 
 选项：
   --force             覆盖已有的 .tadk/project.conf
+  --module MODULE     指定 Android application 模块，例如 feature/chat
   -h, --help          显示帮助
 
 参数：
@@ -35,7 +37,9 @@ usage() {
 示例：
   tadk init
   tadk init --force
+  tadk init --module mobile
   tadk init ~/projects/MyApp
+  tadk init --module feature/chat ~/projects/MyApp
   tadk init --force ~/projects/MyApp
 HELP
 }
@@ -44,6 +48,28 @@ while (( $# > 0 )); do
     case "$1" in
         --force)
             FORCE=true
+            ;;
+
+        --module)
+            shift
+
+            [[ $# -gt 0 ]] ||
+                tadk_die "--module 缺少模块名称" 64
+
+            [[ -z "$MODULE" ]] ||
+                tadk_die "--module 不能重复指定" 64
+
+            MODULE="$1"
+            ;;
+
+        --module=*)
+            [[ -z "$MODULE" ]] ||
+                tadk_die "--module 不能重复指定" 64
+
+            MODULE="${1#--module=}"
+
+            [[ -n "$MODULE" ]] ||
+                tadk_die "--module 缺少模块名称" 64
             ;;
 
         -h|--help)
@@ -99,4 +125,4 @@ printf '覆盖：%s\n' "$FORCE"
 tadk_separator
 printf '\n'
 
-tadk_init_project "$PROJECT_ROOT" "$FORCE"
+tadk_init_project "$PROJECT_ROOT" "$FORCE" "$MODULE"

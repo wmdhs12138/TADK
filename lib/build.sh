@@ -6,6 +6,10 @@ fi
 
 readonly TADK_BUILD_SH_LOADED=1
 
+_TADK_BUILD_MODULE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$_TADK_BUILD_MODULE_DIR/module.sh"
+unset _TADK_BUILD_MODULE_DIR
+
 tadk_build_validate_type() {
     local build_type="$1"
 
@@ -42,13 +46,7 @@ tadk_build_validate_module() {
 
     local module="$1"
 
-    [[ -n "$module" ]] || return 1
-
-    case "$module" in
-        *[!A-Za-z0-9_.-]*)
-            return 1
-            ;;
-    esac
+    tadk_module_validate "$module"
 }
 
 tadk_build_module_task() {
@@ -59,6 +57,7 @@ tadk_build_module_task() {
     local module="$1"
     local build_type="$2"
     local task=""
+    local gradle_module=""
 
     tadk_build_validate_module "$module" ||
         return 1
@@ -66,7 +65,10 @@ tadk_build_module_task() {
     task="$(tadk_build_task "$build_type")" ||
         return 1
 
-    printf ':%s:%s\n' "$module" "$task"
+    gradle_module="$(tadk_module_to_gradle_path "$module")" ||
+        return 1
+
+    printf '%s:%s\n' "$gradle_module" "$task"
 }
 
 tadk_build_require_gradlew() {

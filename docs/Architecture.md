@@ -12,18 +12,51 @@ bin/tadk
 
 Commands such as `build`, `install`, `launch`, and `logcat` remain atomic CLI operations. Composite commands may orchestrate them through the Workflow Engine.
 
+## Project context and configuration
+
+Commands locate the nearest Android Gradle project from the current
+directory. When `.tadk/project.conf` exists, it is parsed as data rather
+than sourced as shell code. The configuration currently records:
+
+```text
+version=1
+module=app
+variant=debug
+```
+
+Nested modules are stored as project-relative paths such as
+`feature/chat` and converted to the Gradle path `:feature:chat` for task
+execution.
+
+Configured module and variant values are used by `build`, `install`,
+`run`, `dev`, and Release APK resolution. Explicit command-line variant
+options take precedence. Projects without a configuration file retain
+the legacy project-wide compatibility behavior.
+
 ## Workflow Engine
 
-`lib/workflow.sh` is a business-agnostic sequential step runner. Its public MVP API is:
+`lib/workflow.sh` is a business-agnostic sequential step runner. Its
+current public API is:
 
 ```bash
 workflow_register STEP FUNCTION
+workflow_register_if STEP CONDITION_FUNCTION FUNCTION
+workflow_before STEP FUNCTION
+workflow_after STEP FUNCTION
 workflow_has_step STEP
 workflow_step STEP
 workflow_run STEP...
 ```
 
-The engine owns registration, lookup, ordered execution, fail-fast behavior, and exit-code propagation. It does not know what Android builds, APKs, adb, or logcat are.
+The engine owns registration, condition checks, hook ordering, sequential
+execution, fail-fast behavior, and exit-code propagation. A registered
+step runs as:
+
+```text
+condition -> before hooks -> step body -> after hooks
+```
+
+The engine does not know what Android builds, APKs, adb, or logcat are.
 
 ## `dev` workflow
 
@@ -56,10 +89,35 @@ The workflow is sequential. When a step returns a non-zero exit code:
 
 The existing `dev` integration test verifies that a failed Gradle build prevents APK installation.
 
-## Current migration boundary
+## `run` workflow
 
-`tadk run` is intentionally not migrated yet. It includes specialized build-only, APK reporting, timing, Termux opening, install, and launch behavior. It should only move to the Workflow Engine after those semantics can be preserved without forcing business logic into the engine.
+`commands/run.sh` uses the Workflow Engine while keeping its command-
+specific behavior in step functions:
+
+```text
+build
+  -> resolve-apk
+  -> report
+  -> build-only / open-installer / adb-install
+  -> adb-launch
+  -> logcat
+  -> complete
+```
+
+Conditional steps keep their predicates in `commands/run.sh`; the engine
+does not contain Android-specific conditions.
+
+## Release workflow
+
+`commands/release.sh` exposes Release inspection, verification, build,
+keystore, setup, initialization, Gradle application, and bootstrap
+operations. The underlying `lib/release_*.sh` modules own file handling,
+password sourcing, marker validation, and signing behavior. Bootstrap performs
+a read-only preflight for `--dry-run`; a real run snapshots its managed files
+and restores them if a later step fails.
 
 ## Future extensions
 
-Hooks, shared workflow context, plugins, retries, conditional pipelines, and parallel execution are outside the MVP. They should be introduced only with independent tests and a clear production use case.
+Shared workflow context, plugin discovery, retries, and parallel
+execution are deferred until the current command and Workflow contracts
+have independent compatibility tests and a clear production use case.

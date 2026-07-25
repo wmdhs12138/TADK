@@ -6,6 +6,10 @@ fi
 
 readonly TADK_APK_SH_LOADED=1
 
+_TADK_APK_MODULE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$_TADK_APK_MODULE_DIR/module.sh"
+unset _TADK_APK_MODULE_DIR
+
 tadk_find_latest_apk() {
     local project_root="$1"
     local build_type="${2:-debug}"
@@ -44,11 +48,8 @@ tadk_find_latest_module_apk() {
 
     [[ -d "$project_root" ]] || return 1
 
-    case "$module" in
-        ''|*[!A-Za-z0-9_.-]*)
-            return 1
-            ;;
-    esac
+    tadk_module_validate "$module" ||
+        return 1
 
     tadk_apk_validate_type "$build_type" ||
         return 1

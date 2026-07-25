@@ -36,6 +36,213 @@ tadk_release_bootstrap_run_step() {
     return "$step_status"
 }
 
+tadk_release_bootstrap_resolve_target() {
+    if (( $# != 1 )); then
+        tadk_error \
+            "internal error: bootstrap target resolution requires a path"
+        return 64
+    fi
+
+    local requested_path="$1"
+
+    [[ -n "$requested_path" ]] || {
+        tadk_error "bootstrap target path must not be empty"
+        return 64
+    }
+
+    case "$requested_path" in
+        /*)
+            printf '%s\n' "$requested_path"
+            ;;
+
+        *)
+            printf '%s/%s\n' "$PWD" "$requested_path"
+            ;;
+    esac
+}
+
+tadk_release_bootstrap_snapshot_targets() {
+    if (( $# < 2 )); then
+        tadk_error \
+            "internal error: bootstrap snapshot requires a directory and targets"
+        return 64
+    fi
+
+    local snapshot_dir="$1"
+    shift
+    local manifest_path="$snapshot_dir/manifest"
+    local target_path=""
+    local snapshot_path=""
+    local index=0
+    local mode=""
+
+    mkdir -p -- "$snapshot_dir" || return 1
+    chmod 700 "$snapshot_dir" || return 1
+
+    : > "$manifest_path" || return 1
+    chmod 600 "$manifest_path" || return 1
+
+    for target_path in "$@"; do
+        [[ -n "$target_path" ]] || {
+            tadk_error "internal error: bootstrap snapshot contains an empty target"
+            return 64
+        }
+
+        if [[ -L "$target_path" ]]; then
+            tadk_error \
+                "bootstrap refuses to modify symlink target: $target_path"
+            return 1
+        fi
+
+        if [[ -e "$target_path" ]]; then
+            [[ -f "$target_path" ]] || {
+                tadk_error \
+                    "bootstrap target exists but is not a regular file: $target_path"
+                return 1
+            }
+
+            snapshot_path="$snapshot_dir/file-$index"
+            cp -p -- "$target_path" "$snapshot_path" || return 1
+            mode="$(stat -c '%a' "$target_path")" || return 1
+            printf 'present\t%s\t%s\t%s\n' \
+                "$index" \
+                "$mode" \
+                "$target_path" \
+                >> "$manifest_path" || return 1
+        else
+            printf 'absent\t%s\t-\t%s\n' \
+                "$index" \
+                "$target_path" \
+                >> "$manifest_path" || return 1
+        fi
+
+        index=$((index + 1))
+    done
+}
+
+tadk_release_bootstrap_restore_snapshot() {
+    if (( $# != 1 )); then
+        tadk_error \
+            "internal error: bootstrap restore requires a snapshot directory"
+        return 64
+    fi
+
+    local snapshot_dir="$1"
+    local manifest_path="$snapshot_dir/manifest"
+    local state=""
+    local index=""
+    local mode=""
+    local target_path=""
+    local snapshot_path=""
+    local restore_status=0
+
+    [[ -f "$manifest_path" ]] || {
+        tadk_error "bootstrap snapshot manifest is missing: $manifest_path"
+        return 1
+    }
+
+    while IFS=$'\t' read -r state index mode target_path; do
+        [[ -n "$target_path" ]] || continue
+
+        case "$state" in
+            present)
+                snapshot_path="$snapshot_dir/file-$index"
+                if [[ ! -f "$snapshot_path" ]]; then
+                    tadk_error \
+                        "bootstrap snapshot file is missing: $snapshot_path"
+                    restore_status=1
+                    continue
+                fi
+
+                if [[ -e "$target_path" || -L "$target_path" ]]; then
+                    if [[ ! -f "$target_path" || -L "$target_path" ]]; then
+                        tadk_error \
+                            "cannot restore over non-file target: $target_path"
+                        restore_status=1
+                        continue
+                    fi
+                    rm -f -- "$target_path" || {
+                        restore_status=1
+                        continue
+                    }
+                fi
+
+                cp -p -- "$snapshot_path" "$target_path" || {
+                    restore_status=1
+                    continue
+                }
+                chmod "$mode" "$target_path" || restore_status=1
+                ;;
+
+            absent)
+                if [[ -L "$target_path" || -f "$target_path" ]]; then
+                    rm -f -- "$target_path" || restore_status=1
+                elif [[ -e "$target_path" ]]; then
+                    tadk_error \
+                        "cannot remove non-file target created during rollback: $target_path"
+                    restore_status=1
+                fi
+                ;;
+
+            *)
+                tadk_error \
+                    "bootstrap snapshot contains an invalid state: $state"
+                restore_status=1
+                ;;
+        esac
+    done < "$manifest_path"
+
+    return "$restore_status"
+}
+
+tadk_release_bootstrap_rollback() {
+    if (( $# != 2 && $# != 4 )); then
+        tadk_error \
+            "internal error: bootstrap rollback requires snapshot and status"
+        return 64
+    fi
+
+    local snapshot_dir="$1"
+    local original_status="$2"
+    local project_root="${3:-}"
+    local tadk_directory_existed="${4:-true}"
+    local restore_status=0
+
+    case "$tadk_directory_existed" in
+        true|false)
+            ;;
+        *)
+            tadk_error "internal error: invalid .tadk directory state"
+            return 64
+            ;;
+    esac
+
+    tadk_warn "bootstrap failed; restoring the original Release files"
+    if tadk_release_bootstrap_restore_snapshot "$snapshot_dir"; then
+        tadk_warn "bootstrap rollback completed"
+    else
+        restore_status=$?
+        tadk_error \
+            "bootstrap rollback was incomplete; snapshot retained at $snapshot_dir"
+    fi
+
+    if (( restore_status == 0 )); then
+        if [[ -n "$project_root" &&
+              "$tadk_directory_existed" == false &&
+              -d "$project_root/.tadk" &&
+              ! -L "$project_root/.tadk" ]]; then
+            rmdir -- "$project_root/.tadk" 2>/dev/null || true
+        fi
+
+        rm -rf -- "$snapshot_dir" || {
+            tadk_warn "bootstrap snapshot cleanup failed: $snapshot_dir"
+        }
+        return "$original_status"
+    fi
+
+    return 1
+}
+
 tadk_release_bootstrap_ignore_keystore() {
     if (( $# != 2 )); then
         tadk_error \
@@ -85,7 +292,7 @@ tadk_release_bootstrap_ignore_keystore() {
 }
 
 tadk_release_bootstrap_execute() {
-    if (( $# != 13 )); then
+    if (( $# != 13 && $# != 14 )); then
         tadk_error \
             "内部错误：release bootstrap 参数数量错误"
         return 64
@@ -104,8 +311,21 @@ tadk_release_bootstrap_execute() {
     local force="${11}"
     local verbose="${12}"
     local project_root="${13}"
+    local dry_run="${14:-false}"
 
     local resolved_keystore=""
+    local module=""
+    local dsl=""
+    local build_file=""
+    local example_path="$project_root/keystore.properties.example"
+    local snippet_path=""
+    local properties_path="$project_root/keystore.properties"
+    local gitignore_path="$project_root/.gitignore"
+    local snapshot_dir=""
+    local step_status=0
+    local rollback_status=0
+    local tadk_directory_existed=false
+    local -a snapshot_targets=()
 
     case "$force" in
         true|false)
@@ -123,6 +343,15 @@ tadk_release_bootstrap_execute() {
         *)
             tadk_error \
                 "内部错误：无效的详细输出选项：$verbose"
+            return 64
+            ;;
+    esac
+
+    case "$dry_run" in
+        true|false)
+            ;;
+        *)
+            tadk_error "invalid dry-run option: $dry_run"
             return 64
             ;;
     esac
@@ -148,9 +377,80 @@ tadk_release_bootstrap_execute() {
     }
 
     resolved_keystore="$(
-        tadk_release_keygen_resolve_target \
+        tadk_release_bootstrap_resolve_target \
             "$requested_keystore"
     )" || return $?
+
+    module="$(
+        tadk_release_setup_resolve_module \
+            "$project_root" \
+            "$requested_module"
+    )" || return $?
+
+    dsl="$(
+        tadk_release_setup_detect_dsl \
+            "$project_root" \
+            "$module"
+    )" || return $?
+
+    build_file="$(
+        tadk_release_apply_resolve_build_file \
+            "$project_root" \
+            "$module" \
+            "$dsl"
+    )" || return $?
+
+    [[ -f "$build_file" && ! -L "$build_file" ]] || {
+        tadk_error \
+            "Gradle build file is missing or is a symlink: $build_file"
+        return 1
+    }
+
+    case "$dsl" in
+        kotlin)
+            snippet_path="$project_root/.tadk/release-signing-snippet.gradle.kts"
+            ;;
+
+        groovy)
+            snippet_path="$project_root/.tadk/release-signing-snippet.gradle"
+            ;;
+
+        *)
+            tadk_error "internal error: unknown Gradle DSL: $dsl"
+            return 64
+            ;;
+    esac
+
+    local marker_state=""
+    if [[ "$dry_run" == true ]]; then
+        if [[ -e "$resolved_keystore" && "$force" != true ]]; then
+            tadk_error \
+                "keystore already exists; use --force to replace it: $resolved_keystore"
+            return 1
+        fi
+
+        if [[ -e "$properties_path" && "$force" != true ]]; then
+            tadk_error \
+                "file already exists; use --force to replace it: $properties_path"
+            return 1
+        fi
+
+        tadk_release_setup_preflight_targets \
+            "$force" \
+            "$example_path" \
+            "$snippet_path" || return $?
+
+        marker_state="$(
+            tadk_release_apply_check_markers "$build_file"
+        )" || return $?
+
+        if [[ "$force" != true && "$marker_state" == absent ]] &&
+           tadk_release_apply_has_existing_signing_config "$build_file"; then
+            tadk_error \
+                "existing signingConfig detected; bootstrap refuses automatic modification"
+            return 1
+        fi
+    fi
 
     tadk_heading "TADK Release Bootstrap"
     tadk_separator
@@ -166,7 +466,55 @@ tadk_release_bootstrap_execute() {
     printf '覆盖已有文件：%s\n' "$force"
     tadk_separator
 
-    tadk_release_bootstrap_run_step \
+    if [[ "$dry_run" == true ]]; then
+        tadk_info "dry-run: no files will be created or modified"
+        printf '  keygen: %s\n' "$resolved_keystore"
+        printf '  setup: %s\n' "$example_path"
+        printf '  setup: %s\n' "$snippet_path"
+        printf '  init: %s\n' "$properties_path"
+        printf '  apply: %s\n' "$build_file"
+        printf '  gitignore: %s\n' "$gitignore_path"
+        tadk_success "Release bootstrap dry-run preflight passed"
+        return 0
+    fi
+
+    snapshot_dir="$(mktemp -d "${TMPDIR:-/tmp}/tadk-release-bootstrap.XXXXXX")" || {
+        tadk_error "unable to create bootstrap transaction snapshot"
+        return 1
+    }
+
+    snapshot_targets=(
+        "$resolved_keystore"
+        "$example_path"
+        "$snippet_path"
+        "$properties_path"
+        "$gitignore_path"
+        "$build_file"
+    )
+
+    if [[ -e "$project_root/.tadk" ]]; then
+        [[ -d "$project_root/.tadk" && ! -L "$project_root/.tadk" ]] || {
+            tadk_error \
+                "bootstrap requires .tadk to be a normal directory: $project_root/.tadk"
+            rm -rf -- "$snapshot_dir"
+            return 1
+        }
+        tadk_directory_existed=true
+    fi
+
+    if tadk_release_bootstrap_snapshot_targets \
+        "$snapshot_dir" \
+        "${snapshot_targets[@]}"; then
+        :
+    else
+        step_status=$?
+        rm -rf -- "$snapshot_dir"
+        return "$step_status"
+    fi
+
+    tadk_info "bootstrap transaction snapshot created"
+
+    if tadk_release_bootstrap_run_step \
         "生成 keystore" \
         tadk_release_keygen_execute \
         "$resolved_keystore" \
@@ -179,23 +527,62 @@ tadk_release_bootstrap_execute() {
         "$validity_days" \
         "$store_type" \
         "$force" \
-        "$verbose" ||
-        return $?
+        "$verbose"; then
+        :
+    else
+        step_status=$?
+        if tadk_release_bootstrap_rollback \
+            "$snapshot_dir" \
+            "$step_status" \
+            "$project_root" \
+            "$tadk_directory_existed"; then
+            rollback_status=0
+        else
+            rollback_status=$?
+        fi
+        return "$rollback_status"
+    fi
 
-    tadk_release_bootstrap_ignore_keystore \
+    if tadk_release_bootstrap_ignore_keystore \
         "$project_root" \
-        "$resolved_keystore" ||
-        return $?
+        "$resolved_keystore"; then
+        :
+    else
+        step_status=$?
+        if tadk_release_bootstrap_rollback \
+            "$snapshot_dir" \
+            "$step_status" \
+            "$project_root" \
+            "$tadk_directory_existed"; then
+            rollback_status=0
+        else
+            rollback_status=$?
+        fi
+        return "$rollback_status"
+    fi
 
-    tadk_release_bootstrap_run_step \
+    if tadk_release_bootstrap_run_step \
         "生成签名配置骨架" \
         tadk_release_setup_execute \
         "$requested_module" \
         "$force" \
-        "$project_root" ||
-        return $?
+        "$project_root"; then
+        :
+    else
+        step_status=$?
+        if tadk_release_bootstrap_rollback \
+            "$snapshot_dir" \
+            "$step_status" \
+            "$project_root" \
+            "$tadk_directory_existed"; then
+            rollback_status=0
+        else
+            rollback_status=$?
+        fi
+        return "$rollback_status"
+    fi
 
-    tadk_release_bootstrap_run_step \
+    if tadk_release_bootstrap_run_step \
         "创建本地签名配置" \
         tadk_release_init_execute \
         "$project_root" \
@@ -204,17 +591,46 @@ tadk_release_bootstrap_execute() {
         "$storepass_environment" \
         "$keypass_environment" \
         "$force" \
-        false ||
-        return $?
+        false; then
+        :
+    else
+        step_status=$?
+        if tadk_release_bootstrap_rollback \
+            "$snapshot_dir" \
+            "$step_status" \
+            "$project_root" \
+            "$tadk_directory_existed"; then
+            rollback_status=0
+        else
+            rollback_status=$?
+        fi
+        return "$rollback_status"
+    fi
 
-    tadk_release_bootstrap_run_step \
+    if tadk_release_bootstrap_run_step \
         "应用 Gradle 签名配置" \
         tadk_release_apply_execute \
         "$requested_module" \
         "$force" \
         false \
-        "$project_root" ||
-        return $?
+        "$project_root"; then
+        :
+    else
+        step_status=$?
+        if tadk_release_bootstrap_rollback \
+            "$snapshot_dir" \
+            "$step_status" \
+            "$project_root" \
+            "$tadk_directory_existed"; then
+            rollback_status=0
+        else
+            rollback_status=$?
+        fi
+        return "$rollback_status"
+    fi
+
+    rm -rf -- "$snapshot_dir" ||
+        tadk_warn "bootstrap transaction snapshot cleanup failed: $snapshot_dir"
 
     tadk_separator
     tadk_success "Release 签名初始化已完成"

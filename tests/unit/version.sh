@@ -45,4 +45,14 @@ grep -Fq \
     "$TADK_ROOT/CHANGELOG.md" ||
     fail "CHANGELOG.md does not contain the current release"
 
+release_manifest="$TADK_ROOT/release/manifest.json"
+
+[[ -f "$release_manifest" ]] ||
+    fail "release/manifest.json is missing"
+
+grep -Fq \
+    '"version": "'"$version"'"' \
+    "$release_manifest" ||
+    fail "release/manifest.json does not reference the current version"
+
 printf 'PASS: version consistency\n'

@@ -113,7 +113,7 @@ case_write_rejects_invalid_module() {
     new_case_root
     root="$CASE_ROOT"
 
-    tadk_config_write "$root" 'bad/module' debug \
+    tadk_config_write "$root" '../app' debug \
         >/dev/null 2>&1 ||
         status=$?
 

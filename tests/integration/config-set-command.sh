@@ -358,7 +358,7 @@ case_set_rejects_invalid_module_value() {
     before="$(cat "$root/.tadk/project.conf")"
 
     "$TADK_ROOT/bin/tadk" \
-        config set module 'bad/module' "$root" \
+        config set module '../app' "$root" \
         >/dev/null 2>&1 ||
         status=$?
 

@@ -3,6 +3,11 @@
 Alpha.18 introduces persistent Android project configuration and connects
 it to TADK's primary development workflows.
 
+The current `develop` line also includes ADB device workflows and Release
+signing tools. This working tree adds explicit and nested module selection to
+`tadk init`, plus `tadk release bootstrap --dry-run` and automatic rollback
+when a later signing step fails.
+
 ## Highlights
 
 ### Initialize an existing Android project

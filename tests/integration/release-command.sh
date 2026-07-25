@@ -2336,6 +2336,115 @@ assert_contains \
 
 printf 'PASS release bootstrap validates required arguments\n\n'
 
+printf 'TEST release bootstrap dry-run is read-only\n'
+
+: > "$MOCK_LOG"
+
+output="$(
+    cd "$BOOTSTRAP_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        bootstrap \
+        --keystore "$BOOTSTRAP_KEYSTORE" \
+        --alias production \
+        --dname "CN=TADK Bootstrap, O=TADK, C=CA" \
+        --storepass-env BOOTSTRAP_STOREPASS \
+        --module app \
+        --force \
+        --dry-run \
+        2>&1
+)"
+
+assert_contains \
+    "$output" \
+    "dry-run" \
+    "bootstrap dry-run 应报告只读预检"
+
+calls="$(cat "$MOCK_LOG")"
+
+[[ -z "$calls" ]] ||
+    fail "bootstrap dry-run 不应调用 keytool 或写入 mock 日志"
+
+printf 'PASS release bootstrap dry-run is read-only\n\n'
+
+printf 'TEST release bootstrap rolls back managed files after a later failure\n'
+
+BOOTSTRAP_ROLLBACK_PROJECT="$TEST_ROOT/release-bootstrap-rollback"
+BOOTSTRAP_ROLLBACK_BUILD="$BOOTSTRAP_ROLLBACK_PROJECT/app/build.gradle.kts"
+BOOTSTRAP_ROLLBACK_KEYSTORE="$BOOTSTRAP_ROLLBACK_PROJECT/rollback.p12"
+
+mkdir -p "$BOOTSTRAP_ROLLBACK_PROJECT/app"
+
+cp "$BOOTSTRAP_PROJECT/gradlew" \
+    "$BOOTSTRAP_ROLLBACK_PROJECT/gradlew"
+
+cp "$BOOTSTRAP_PROJECT/settings.gradle.kts" \
+    "$BOOTSTRAP_ROLLBACK_PROJECT/settings.gradle.kts"
+
+cat > "$BOOTSTRAP_ROLLBACK_BUILD" <<'BUILD'
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "com.example.bootstrap.rollback"
+    signingConfigs {
+        release { }
+    }
+}
+BUILD
+
+chmod +x "$BOOTSTRAP_ROLLBACK_PROJECT/gradlew"
+
+: > "$MOCK_LOG"
+
+set +e
+output="$(
+    cd "$BOOTSTRAP_ROLLBACK_PROJECT"
+
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        bootstrap \
+        --keystore "$BOOTSTRAP_ROLLBACK_KEYSTORE" \
+        --alias rollback \
+        --dname "CN=TADK Bootstrap Rollback, O=TADK, C=CA" \
+        --storepass-env BOOTSTRAP_STOREPASS \
+        --module app \
+        2>&1
+)"
+command_status=$?
+set -e
+
+assert_failure \
+    "$command_status" \
+    "apply 失败时 bootstrap 应返回失败"
+
+assert_contains \
+    "$output" \
+    "bootstrap rollback completed" \
+    "bootstrap 应报告回滚完成"
+
+[[ ! -e "$BOOTSTRAP_ROLLBACK_KEYSTORE" ]] ||
+    fail "bootstrap 回滚后不应保留新生成的 keystore"
+
+[[ ! -e "$BOOTSTRAP_ROLLBACK_PROJECT/keystore.properties.example" ]] ||
+    fail "bootstrap 回滚后不应保留 setup 模板"
+
+[[ ! -e "$BOOTSTRAP_ROLLBACK_PROJECT/keystore.properties" ]] ||
+    fail "bootstrap 回滚后不应保留本地签名配置"
+
+[[ ! -e "$BOOTSTRAP_ROLLBACK_PROJECT/.gitignore" ]] ||
+    fail "bootstrap 回滚后不应保留新建的 .gitignore"
+
+if grep -Fq \
+    "// TADK Release signing begin" \
+    "$BOOTSTRAP_ROLLBACK_BUILD"; then
+    fail "bootstrap 回滚后不应保留 Gradle 签名配置"
+fi
+
+printf 'PASS release bootstrap rolls back managed files after a later failure\n\n'
+
 unset BOOTSTRAP_STOREPASS
 unset BOOTSTRAP_KEYPASS
 
