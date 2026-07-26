@@ -127,6 +127,15 @@ run_test "compat bin/install --help" \
 run_test "install implementation exists" \
     test -x "$TADK_ROOT/commands/install.sh"
 
+run_test "tadk self-update --help" \
+    "$TADK_ROOT/bin/tadk" self-update --help
+
+run_test "compat bin/self-update --help" \
+    "$TADK_ROOT/bin/self-update" --help
+
+run_test "self-update implementation exists" \
+    test -x "$TADK_ROOT/commands/self-update.sh"
+
 run_test "tadk launch --help" \
     "$TADK_ROOT/bin/tadk" launch --help
 

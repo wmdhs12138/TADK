@@ -33,6 +33,13 @@ Android and SDK versions, foreground package, `connection_type`, and
 same `version`, `status`, `exit_code`, `summary`, and ordered `checks` shape.
 Each check contains a `name`, `status`, and human-readable `detail`.
 
+`tadk self-update --check ARCHIVE --json` validates a TADK package without
+modifying the current installation. It uses the same schema version and
+returns archive metadata plus ordered checks for the archive name, checksum,
+layout, version, package contract, and preserved paths. `--sha256 HASH` adds
+the expected checksum; omitting it produces a `warn` result rather than
+claiming cryptographic verification.
+
 ## Change policy
 
 - New commands, options, and fields are additive when practical.

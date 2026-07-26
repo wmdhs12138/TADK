@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+exec "$TADK_ROOT/lib/compat-command.sh" \
+    "$TADK_ROOT" \
+    self-update \
+    "$@"

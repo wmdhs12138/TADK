@@ -8,6 +8,7 @@ build|构建当前 Android 项目的 APK|commands/build.sh
 apk|查找和列出当前项目生成的 APK|commands/apk.sh
 release|检查和验证 Android Release 签名|commands/release.sh
 install|通过 ADB 安装已有 APK|commands/install.sh
+self-update|检查 TADK 包和更新归档|commands/self-update.sh
 launch|通过 ADB 启动已安装的 Android 应用|commands/launch.sh
 logcat|查看当前 Android 应用的运行日志|commands/logcat.sh
 run|构建并运行当前 Android 项目|commands/run.sh
@@ -15,4 +16,3 @@ dev|执行构建、安装、启动和日志监听开发流程|commands/dev.sh
 clean|清理当前项目构建缓存|commands/clean.sh
 info|显示当前 Android 项目信息|commands/info.sh
 test|运行 TADK 测试套件|commands/test.sh
-
