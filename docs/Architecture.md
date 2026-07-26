@@ -51,6 +51,10 @@ mode keeps device metadata in English, machine-oriented field names and
 returns one object even when no authorized device is available. Text mode
 continues to provide the existing operator-oriented guidance.
 
+`tadk release doctor --json` exposes the signing toolchain checks through the
+same versioned diagnostics envelope. It reports tool availability without
+running a build, reading passwords, or mutating project files.
+
 ## Workflow Engine
 
 `lib/workflow.sh` is a business-agnostic sequential step runner. Its

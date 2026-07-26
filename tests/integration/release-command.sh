@@ -219,6 +219,11 @@ assert_contains \
     "--storepass-env" \
     "keygen 帮助应说明密码环境变量"
 
+assert_contains \
+    "$output" \
+    "tadk release doctor --json" \
+    "帮助应包含 doctor JSON 模式"
+
 printf 'PASS release help\n\n'
 
 printf 'TEST release doctor succeeds\n'
@@ -246,6 +251,80 @@ assert_contains \
     "doctor 应检查 apksigner"
 
 printf 'PASS release doctor succeeds\n\n'
+
+printf 'TEST release doctor JSON succeeds\n'
+
+json_output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        doctor \
+        --json \
+        2>&1
+)"
+
+assert_contains \
+    "$json_output" \
+    '"version":1' \
+    "JSON 应包含诊断版本"
+
+assert_contains \
+    "$json_output" \
+    '"status":"pass"' \
+    "环境完整时 JSON 状态应为 pass"
+
+assert_contains \
+    "$json_output" \
+    '"summary":{"passed":3,"warnings":0,"failed":0}' \
+    "JSON 应统计三个环境检查"
+
+assert_contains \
+    "$json_output" \
+    '"name":"keytool"' \
+    "JSON 应包含 keytool 检查"
+
+[[ "$json_output" != *"TADK Release Doctor"* ]] ||
+    fail "JSON 不应混入文本标题"
+
+printf 'PASS release doctor JSON succeeds\n\n'
+
+printf 'TEST release doctor JSON reports failure\n'
+
+mv "$MOCK_BIN/apksigner" "$MOCK_BIN/apksigner.disabled"
+
+set +e
+json_output="$(
+    "$TADK_ROOT/bin/tadk" \
+        release \
+        doctor \
+        --json \
+        2>&1
+)"
+json_status=$?
+set -e
+
+mv "$MOCK_BIN/apksigner.disabled" "$MOCK_BIN/apksigner"
+
+assert_equals \
+    "1" \
+    "$json_status" \
+    "缺少 apksigner 时 JSON doctor 应失败"
+
+assert_contains \
+    "$json_output" \
+    '"status":"fail"' \
+    "缺少工具时 JSON 状态应为 fail"
+
+assert_contains \
+    "$json_output" \
+    '"failed":1' \
+    "JSON 应统计失败检查"
+
+assert_contains \
+    "$json_output" \
+    '"name":"apksigner"' \
+    "JSON 应包含失败的 apksigner 检查"
+
+printf 'PASS release doctor JSON reports failure\n\n'
 
 printf 'TEST verify explicit signed APK\n'
 

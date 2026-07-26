@@ -115,6 +115,7 @@ Pair, connect or disconnect Android wireless debugging devices:
 Inspect the Release environment and verify a Release APK:
 
     tadk release doctor
+    tadk release doctor --json
     tadk release verify
     tadk release build
 

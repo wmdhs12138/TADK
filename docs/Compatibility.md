@@ -29,6 +29,10 @@ array. Each device includes `serial`, `state`, `details`, manufacturer/model,
 Android and SDK versions, foreground package, `connection_type`, and
 `wireless_address`. The summary exposes `total` and `available` counts.
 
+`tadk release doctor --json` reports the Release signing toolchain with the
+same `version`, `status`, `exit_code`, `summary`, and ordered `checks` shape.
+Each check contains a `name`, `status`, and human-readable `detail`.
+
 ## Change policy
 
 - New commands, options, and fields are additive when practical.
