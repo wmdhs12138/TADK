@@ -24,7 +24,7 @@ on ARM64 Android devices.
 
 ## Project status
 
-Current development version: `0.3.0-alpha.18`
+Current development version: `0.3.0-alpha.19`
 
 Alpha.18 adds persistent Android project configuration. TADK can now
 initialize existing projects and consistently apply the configured

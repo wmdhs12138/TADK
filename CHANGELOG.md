@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0-alpha.19
+
+### Changed
+
+- Removed the test suite, test command, test CI workflow and test fixtures
+  from the runtime branch.
+- Replaced self-update post-apply smoke-test execution with installation
+  integrity checks for the functional command surface.
+- Updated release and development documentation to focus on functional
+  command workflows.
+
+### Compatibility
+
+- Functional TADK commands remain available.
+- The removed `tadk test` command is no longer part of the runtime contract.
+
 ## 0.3.0-alpha.18
 
 ### Added

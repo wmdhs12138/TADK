@@ -1,6 +1,10 @@
-# TADK 0.3.0-alpha.18
+# TADK 0.3.0-alpha.19
 
-Alpha.18 introduces persistent Android project configuration and connects
+Alpha.19 keeps the runtime focused on functional Android development
+commands and removes test-only code from the mainline.
+
+The previous Alpha.18 release introduced persistent Android project
+configuration and connected
 it to TADK's primary development workflows.
 
 The current `develop` line also includes ADB device workflows and Release
@@ -193,7 +197,7 @@ Run from the TADK repository root:
 
 Expected version:
 
-    TADK 0.3.0-alpha.18
+    TADK 0.3.0-alpha.19
 
 The functional command checks should complete successfully.
 

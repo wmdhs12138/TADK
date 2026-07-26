@@ -2,6 +2,8 @@
 
 ## Current baseline
 
+- **0.3.0-alpha.19:** functionality-first runtime, removal of test-only
+  code, and production installation verification after self-update.
 - **0.3.0-alpha.18:** persistent project configuration, configured
   module/variant builds, ADB device workflows, Release signing tools,
   Workflow-based run and dev.
