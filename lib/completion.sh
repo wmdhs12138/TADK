@@ -78,6 +78,16 @@ _tadk_config_actions() {
     _describe -t tadk-config-actions 'Config action' actions
 }
 
+
+_tadk_completion_actions() {
+    local -a actions=(
+        'zsh:Generate Zsh completion on standard output'
+        'install:Install shell completion'
+    )
+
+    _describe -t tadk-completion-actions 'Completion action' actions
+}
+
 _tadk_authorized_devices() {
     local -a devices
 
@@ -182,7 +192,13 @@ _tadk() {
     case "$command_name" in
         completion)
             if (( CURRENT == 3 )); then
-                _values 'shell' zsh
+                _tadk_completion_actions
+            elif [[ "$action_name" == install && CURRENT == 4 ]]; then
+                if [[ "$PREFIX" == -* ]]; then
+                    compadd -- -h --help
+                else
+                    _values 'shell' zsh
+                fi
             elif [[ "$PREFIX" == -* ]]; then
                 compadd -- -h --help
             fi
@@ -262,6 +278,203 @@ _tadk "$@"
 ZSH
 }
 
+_tadk_completion_install_directory() {
+    if [[ -n "${PREFIX:-}" ]]; then
+        printf '%s\n' "$PREFIX/share/zsh/site-functions"
+    else
+        printf '%s\n' "$HOME/.local/share/zsh/site-functions"
+    fi
+}
+
+_tadk_completion_zshrc_block() {
+    cat <<'ZSHRC'
+# >>> TADK Zsh completion >>>
+typeset -U fpath
+
+if [[ -n "${PREFIX:-}" ]]; then
+    fpath=("$PREFIX/share/zsh/site-functions" $fpath)
+else
+    fpath=("$HOME/.local/share/zsh/site-functions" $fpath)
+fi
+
+autoload -Uz compinit
+(( $+functions[compdef] )) || compinit -i
+
+autoload -Uz _tadk
+compdef _tadk tadk
+# <<< TADK Zsh completion <<<
+ZSHRC
+}
+
+_tadk_completion_install_zsh() {
+    local completion_dir=""
+    local completion_file=""
+    local config_root=""
+    local zshrc=""
+    local cache_dir=""
+    local temp_dir=""
+    local temp_completion=""
+    local temp_zshrc=""
+    local backup_path=""
+    local marker_start='# >>> TADK Zsh completion >>>'
+    local marker_end='# <<< TADK Zsh completion <<<'
+    local start_count=0
+    local end_count=0
+    local config_changed=false
+
+    completion_dir="$(_tadk_completion_install_directory)"
+    completion_file="$completion_dir/_tadk"
+    config_root="${ZDOTDIR:-$HOME}"
+    zshrc="$config_root/.zshrc"
+    cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tadk/completion"
+
+    mkdir -p "$completion_dir" "$config_root" "$cache_dir" || {
+        tadk_die "$(tadk_text 'completion.install_failed' 'cannot create installation directories')"
+    }
+
+    if [[ -e "$zshrc" && ! -f "$zshrc" ]]; then
+        tadk_die "$(tadk_text 'completion.install_failed' "$zshrc is not a regular file")"
+    fi
+
+    temp_dir="$(mktemp -d "$cache_dir/install.XXXXXX")" || {
+        tadk_die "$(tadk_text 'completion.install_failed' 'cannot create temporary directory')"
+    }
+    trap "rm -rf -- $(printf '%q' "$temp_dir")" EXIT
+
+    temp_completion="$temp_dir/_tadk"
+    temp_zshrc="$temp_dir/zshrc"
+
+    _tadk_completion_zsh > "$temp_completion"
+    chmod 0644 "$temp_completion"
+    mv -f -- "$temp_completion" "$completion_file" || {
+        tadk_die "$(tadk_text 'completion.install_failed' "cannot write $completion_file")"
+    }
+
+    if [[ -f "$zshrc" ]]; then
+        start_count="$(grep -Fxc -- "$marker_start" "$zshrc" || true)"
+        end_count="$(grep -Fxc -- "$marker_end" "$zshrc" || true)"
+    fi
+
+    if (( start_count != end_count || start_count > 1 )); then
+        tadk_die "$(tadk_text 'completion.zshrc_invalid' "$zshrc")"
+    fi
+
+    if [[ -f "$zshrc" ]]; then
+        awk \
+            -v start="$marker_start" \
+            -v end="$marker_end" \
+            -v legacy_header='# TADK Zsh completion' \
+            -v legacy_fpath='fpath=("$PREFIX/share/zsh/site-functions" $fpath)' \
+            -v legacy_autoload='autoload -Uz compinit' \
+            -v legacy_compinit='compinit -i' \
+            '
+            function emit(line) {
+                if (line == "") {
+                    pending_blank += 1
+                    return
+                }
+
+                while (pending_blank > 0) {
+                    print ""
+                    pending_blank -= 1
+                }
+
+                print line
+            }
+
+            $0 == start {
+                skipping = 1
+                next
+            }
+
+            $0 == end {
+                skipping = 0
+                next
+            }
+
+            skipping {
+                next
+            }
+
+            $0 == legacy_header {
+                first = $0
+
+                if ((getline second) <= 0) {
+                    emit(first)
+                    next
+                }
+                if ((getline third) <= 0) {
+                    emit(first)
+                    emit(second)
+                    next
+                }
+                if ((getline fourth) <= 0) {
+                    emit(first)
+                    emit(second)
+                    emit(third)
+                    next
+                }
+
+                if (second == legacy_fpath && third == legacy_autoload && fourth == legacy_compinit) {
+                    next
+                }
+
+                emit(first)
+                emit(second)
+                emit(third)
+                emit(fourth)
+                next
+            }
+
+            {
+                emit($0)
+            }
+            ' "$zshrc" > "$temp_zshrc"
+    else
+        : > "$temp_zshrc"
+    fi
+
+    if [[ -s "$temp_zshrc" ]]; then
+        printf '\n\n' >> "$temp_zshrc"
+    fi
+    _tadk_completion_zshrc_block >> "$temp_zshrc"
+
+    if [[ -f "$zshrc" ]] &&
+        [[ "$(<"$temp_zshrc")" == "$(<"$zshrc")" ]]
+    then
+        config_changed=false
+    else
+        if [[ -f "$zshrc" ]]; then
+            backup_path="$zshrc.tadk-backup-$(date +%Y%m%d-%H%M%S)-$$"
+            cp -p -- "$zshrc" "$backup_path" || {
+                tadk_die "$(tadk_text 'completion.install_failed' "cannot back up $zshrc")"
+            }
+        fi
+
+        cat "$temp_zshrc" > "$zshrc" || {
+            tadk_die "$(tadk_text 'completion.install_failed' "cannot update $zshrc")"
+        }
+        config_changed=true
+    fi
+
+    tadk_success "$(tadk_text 'completion.script_installed' "$completion_file")"
+
+    if [[ "$config_changed" == true ]]; then
+        tadk_success "$(tadk_text 'completion.config_updated' "$zshrc")"
+        if [[ -n "$backup_path" ]]; then
+            tadk_info "$(tadk_text 'completion.config_backup' "$backup_path")"
+        fi
+    else
+        tadk_info "$(tadk_text 'completion.config_unchanged' "$zshrc")"
+    fi
+
+    printf '\n%s\n' "$(tadk_text 'completion.reload_shell')"
+    printf '  exec zsh\n'
+
+    rm -rf -- "$temp_dir"
+    trap - EXIT
+}
+
 tadk_completion_main() {
     if (( $# == 0 )); then
         tadk_print_help 'help.completion'
@@ -282,6 +495,30 @@ tadk_completion_main() {
             fi
             _tadk_completion_zsh
             return 0
+            ;;
+        install)
+            if (( $# == 1 )); then
+                tadk_print_help 'help.completion'
+                return 64
+            fi
+
+            if (( $# > 2 )); then
+                tadk_die "$(tadk_text 'legacy.extra_argument' "$3")" 64
+            fi
+
+            case "$2" in
+                -h|--help)
+                    tadk_print_help 'help.completion'
+                    return 0
+                    ;;
+                zsh)
+                    _tadk_completion_install_zsh
+                    return 0
+                    ;;
+                *)
+                    tadk_die "$(tadk_text 'completion.unsupported_shell' "$2")" 64
+                    ;;
+            esac
             ;;
         *)
             tadk_die "$(tadk_text 'completion.unsupported_shell' "$1")" 64

@@ -2,23 +2,30 @@
 
 # Simplified Chinese messages for shell completion.
 
-tadk_register_message 'command.completion.description' '生成 Shell 命令补全脚本'
+tadk_register_message 'command.completion.description' '生成并安装 Shell 命令补全'
 tadk_register_message 'completion.unsupported_shell' '不支持的补全 Shell：%s'
+tadk_register_message 'completion.install_failed' '无法安装 Zsh 补全：%s'
+tadk_register_message 'completion.zshrc_invalid' '检测到不完整或重复的 TADK 补全配置块：%s'
+tadk_register_message 'completion.script_installed' '已安装 Zsh 补全脚本：%s'
+tadk_register_message 'completion.config_updated' '已更新 Zsh 配置：%s'
+tadk_register_message 'completion.config_unchanged' 'Zsh 配置已经是最新状态：%s'
+tadk_register_message 'completion.config_backup' '原配置备份：%s'
+tadk_register_message 'completion.reload_shell' '运行以下命令加载补全：'
 tadk_register_message 'help.completion' "$(cat <<'HELP'
 用法：
   tadk completion zsh
+  tadk completion install zsh
 
 说明：
-  将 Shell 命令补全脚本输出到标准输出。
+  tadk completion zsh
+      将 Zsh 命令补全脚本输出到标准输出，适合检查或手动安装。
 
-  可以把输出重定向到 Zsh 的 site-functions 目录完成安装。生成的补全会读取
-  当前 TADK 命令，并支持顶层命令、Release 和 config 操作、常用选项、文件、
-  APK、更新归档、keystore、Logcat 格式及已授权 ADB 设备序列号。
+  tadk completion install zsh
+      自动安装补全脚本，并以受管理、可重复执行的方式配置 ~/.zshrc。
+      已有 .zshrc 会先创建带时间戳的备份；重复执行不会重复添加配置。
+      旧版手动添加的 TADK 补全配置会自动迁移为受管理配置块。
 
-在 Termux Zsh 中安装：
-  mkdir -p "$PREFIX/share/zsh/site-functions"
-  tadk completion zsh > "$PREFIX/share/zsh/site-functions/_tadk"
-  rm -f ~/.zcompdump*
+安装完成后执行：
   exec zsh
 
 选项：

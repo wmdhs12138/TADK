@@ -2,24 +2,32 @@
 
 # English messages for shell completion.
 
-tadk_register_message 'command.completion.description' 'Generate shell completion scripts'
+tadk_register_message 'command.completion.description' 'Generate and install shell completion'
 tadk_register_message 'completion.unsupported_shell' 'Unsupported completion shell: %s'
+tadk_register_message 'completion.install_failed' 'Unable to install Zsh completion: %s'
+tadk_register_message 'completion.zshrc_invalid' 'Incomplete or duplicate TADK completion block detected: %s'
+tadk_register_message 'completion.script_installed' 'Installed Zsh completion script: %s'
+tadk_register_message 'completion.config_updated' 'Updated Zsh configuration: %s'
+tadk_register_message 'completion.config_unchanged' 'Zsh configuration is already current: %s'
+tadk_register_message 'completion.config_backup' 'Original configuration backup: %s'
+tadk_register_message 'completion.reload_shell' 'Run the following command to load completion:'
 tadk_register_message 'help.completion' "$(cat <<'HELP'
 Usage:
   tadk completion zsh
+  tadk completion install zsh
 
 Description:
-  Generate a shell completion script on standard output.
+  tadk completion zsh
+      Write the Zsh completion script to standard output for inspection or
+      manual installation.
 
-  Redirect the output into Zsh's site-functions directory to install it.
-  The generated completion reads the current TADK command surface and supports
-  top-level commands, Release and config actions, common options, files, APKs,
-  archives, keystores, Logcat formats and authorized ADB device serials.
+  tadk completion install zsh
+      Install the completion script and configure ~/.zshrc using an idempotent,
+      managed block. An existing .zshrc is backed up with a timestamp.
+      Repeated runs do not duplicate configuration, and the earlier manual
+      TADK completion snippet is migrated automatically.
 
-Install for Termux Zsh:
-  mkdir -p "$PREFIX/share/zsh/site-functions"
-  tadk completion zsh > "$PREFIX/share/zsh/site-functions/_tadk"
-  rm -f ~/.zcompdump*
+After installation:
   exec zsh
 
 Options:
