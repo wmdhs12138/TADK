@@ -73,8 +73,7 @@ workflow_run STEP...
 ### Workflow API compatibility contract
 
 The seven functions above are public library APIs. Their observable
-behavior is covered by `tests/unit/workflow-contract.sh` and follows these
-rules:
+behavior follows these rules:
 
 - `workflow_register_if` returning false from its condition skips that step,
   returns success, and allows later steps to run.
@@ -136,7 +135,8 @@ The workflow is sequential. When a step returns a non-zero exit code:
 2. Later steps are not executed.
 3. The failing exit code is returned to the caller.
 
-The existing `dev` integration test verifies that a failed Gradle build prevents APK installation.
+The `dev` workflow preserves the failure boundary: a failed Gradle build
+prevents APK installation.
 
 ## `run` workflow
 
@@ -169,4 +169,4 @@ and restores them if a later step fails.
 
 Shared workflow context, plugin discovery, retries, and parallel
 execution are deferred until the current command and Workflow contracts
-have independent compatibility tests and a clear production use case.
+have a clear production use case.

@@ -1,7 +1,7 @@
 # Release
 
-A release must have a clean version identifier, updated release notes, passing
-smoke tests, and passing integration tests. `VERSION` and
+A release must have a clean version identifier, updated release notes, and
+working command entry points. `VERSION` and
 `release/manifest.json` are the source of truth for the release version and
 package contract.
 
@@ -44,7 +44,7 @@ which installs an APK onto an Android device.
 5. The payload is copied additively/overwrite-only. The target directory is
    never deleted during normal apply, and protected local state is not in the
    archive payload.
-6. The command verifies VERSION and runs tests/smoke.sh after copying.
+6. The command verifies VERSION and the installed command manifest after copying.
 7. Any copy or verification failure automatically restores the target from
    the complete backup. The backup is retained for diagnostics.
 

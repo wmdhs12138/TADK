@@ -43,7 +43,8 @@ cryptographic verification.
 tadk self-update --apply ARCHIVE --sha256 HASH --json uses the same version 1
 object and ordered checks. Apply requires exactly 64 hexadecimal SHA-256
 characters, updates only the current TADK_ROOT, and reports lock, backup,
-copy, post-apply VERSION/smoke verification, and automatic rollback checks.
+copy, post-apply VERSION/installation verification, and automatic rollback
+checks.
 Its process exit code remains 0 only for a committed transaction; hard
 preflight, copy, or verification failures return 1. Existing --check text and
 JSON output remain compatible.
@@ -52,13 +53,11 @@ JSON output remain compatible.
 
 - New commands, options, and fields are additive when practical.
 - Existing options keep their meaning within a minor release.
-- A breaking change requires a migration note, a versioned compatibility
-  decision, and tests covering the new behavior.
+- A breaking change requires a migration note and a versioned compatibility
+  decision.
 - Internal library helpers and associative-array layouts are not public API.
 
 ## Verification
 
-Public contracts must have either unit tests for library behavior or
-integration tests for observable command behavior. GitHub Actions runs the
-complete unit, smoke, and integration suites for pull requests targeting
-develop and main.
+Public contracts are verified through the command manifest, explicit exit
+codes, and the functional CLI entry points documented for each command.

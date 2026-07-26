@@ -21,6 +21,3 @@ local.properties
 .env
 .env.*
 secrets.properties
-
-# Generated test projects
-tests/output/

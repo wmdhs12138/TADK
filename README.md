@@ -1,7 +1,7 @@
 # Termux Android DevKit
 
 TADK is a Termux-first Android development toolkit for creating,
-building, testing and maintaining modern Android applications directly
+building and maintaining modern Android applications directly
 on ARM64 Android devices.
 
 ## Current features
@@ -21,7 +21,6 @@ on ARM64 Android devices.
 - Existing-project initialization with `.tadk/project.conf`
 - Configured module and variant support across build/install/run/dev
 - Environment diagnostics through `tadk doctor`
-- Unified unit, smoke and integration test command
 
 ## Project status
 
@@ -36,15 +35,15 @@ Release signing toolchain used to inspect, configure and verify Release
 APKs. The current hardening work adds explicit/nested module selection and
 recoverable Release bootstrap setup.
 
-This is an alpha release intended for development and testing in
+This is an alpha release intended for development and deployment in
 Termux on ARM64 Android devices.
 
 ## Install and update TADK
 
 TADK currently uses a verified manual archive workflow. Use a full archive for
 a new installation and an update archive for an existing installation. Follow
-[`APPLY.md`](APPLY.md) for checksum verification, staging, backup, and smoke
-test steps.
+[`APPLY.md`](APPLY.md) for checksum verification, staging, backup, and
+installation integrity steps.
 
 Before applying an update to an existing installation, run the read-only
 preflight:
@@ -59,16 +58,6 @@ not update the TADK toolkit itself.
 Create a project:
 
     tadk newapp MyApp com.example.myapp
-
-Run the complete test suite:
-
-    tadk test
-
-Run one test group:
-
-    tadk test unit
-    tadk test smoke
-    tadk test integration
 
 ## Initialize an existing project
 
@@ -213,7 +202,6 @@ TADK commands share reusable shell libraries:
     lib/adb.sh       ADB operations
     lib/android.sh   Android project metadata
     lib/workflow.sh  Reusable workflow orchestration
-    lib/test.sh      Unified test runner
 
 Commands should reuse these libraries instead of implementing duplicate
 project detection, build, APK, ADB or output logic.

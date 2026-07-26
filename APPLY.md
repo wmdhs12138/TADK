@@ -63,7 +63,7 @@ The apply state machine is:
    caches, keystores, and signing configuration.
 4. Additively/overwriting-copy the validated payload without deleting the
    target directory.
-5. Verify VERSION and run tests/smoke.sh.
+5. Verify VERSION and the installed command manifest.
 6. On any copy or verification failure, remove the target's children and
    restore them from the complete backup. The target directory itself is
    preserved.

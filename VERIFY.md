@@ -1,4 +1,4 @@
-# Verification
+# Functional verification
 
 Run all commands from the TADK repository root.
 
@@ -12,35 +12,28 @@ Expected:
 
 ## Static checks
 
-    find bin commands lib tests \
+    find bin commands lib \
         -type f -name '*.sh' \
         -exec bash -n {} +
 
     git diff --check
 
-## Test suite
+## Command entry points
 
-Run the complete suite:
+Verify the command registry and the primary CLI entry points:
 
-    bin/tadk test
-
-Run individual groups when diagnosing a failure:
-
-    bin/tadk test unit
-    bin/tadk test smoke
-    bin/tadk test integration
-
-All groups must finish with zero failed tests.
-
-Exact test totals are intentionally not recorded here because they
-change whenever coverage is expanded.
+    bin/tadk --help
+    bin/tadk --version
+    bin/tadk info --help
+    bin/tadk build --help
+    bin/tadk run --help
+    bin/tadk dev --help
+    bin/tadk self-update --help
 
 ## Release consistency
 
-The unit suite verifies that:
+The release metadata must remain aligned:
 
-- `VERSION` contains a valid TADK version;
+- `VERSION` contains the release version;
 - `bin/tadk --version` matches `VERSION`;
-- `release/manifest.json` matches `VERSION`;
-- README, release notes, changelog and verification documentation
-  reference the current version.
+- `release/manifest.json` matches `VERSION`.

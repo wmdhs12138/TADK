@@ -2,7 +2,7 @@
 
 # TADK project initialization library.
 #
-# This file is intended to be sourced by commands and tests.
+# This file is intended to be sourced by commands.
 # Do not enable set -e here because it would affect the caller.
 #
 # Public API:

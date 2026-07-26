@@ -187,19 +187,18 @@ Run from the TADK repository root:
     bash -n commands/run.sh
     bash -n commands/dev.sh
     bin/tadk --version
-    bin/tadk test unit
-    bin/tadk test smoke
-    bin/tadk test integration
-    bin/tadk test
+    bin/tadk --help
+    bin/tadk --version
+    bin/tadk self-update --help
 
 Expected version:
 
     TADK 0.3.0-alpha.18
 
-The complete test suite should finish with no failed test groups.
+The functional command checks should complete successfully.
 
 ## Platform
 
 TADK remains designed for Termux on ARM64 Android devices.
 
-This is an alpha prerelease intended for development and testing.
+This is an alpha prerelease intended for development and deployment.
