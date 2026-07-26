@@ -39,6 +39,16 @@ recoverable Release bootstrap setup.
 This is an alpha release intended for development and testing in
 Termux on ARM64 Android devices.
 
+## Install and update TADK
+
+TADK currently uses a verified manual archive workflow. Use a full archive for
+a new installation and an update archive for an existing installation. Follow
+[`APPLY.md`](APPLY.md) for checksum verification, staging, backup, and smoke
+test steps.
+
+The `tadk install` command is for installing APKs on Android devices; it does
+not update the TADK toolkit itself.
+
 ## Usage
 
 Create a project:

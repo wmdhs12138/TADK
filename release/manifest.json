@@ -5,5 +5,23 @@
   "build": 18,
   "release_date": "2026-07-26",
   "shell": "bash",
-  "focus": "project configuration, device workflows and Release signing"
+  "focus": "project configuration, device workflows and Release signing",
+  "package_contract": {
+    "version": 1,
+    "full_archive": "TADK-{version}.zip",
+    "update_archive": "TADK-{version}-update.zip",
+    "root_directory": "TADK-{version}",
+    "checksum": "SHA-256",
+    "payload": "tracked-files",
+    "update_scope": "changed-tracked-files",
+    "preserve": [
+      ".git/",
+      ".tadk/",
+      "build/",
+      ".gradle/",
+      "*.jks",
+      "*.keystore",
+      "keystore.properties"
+    ]
+  }
 }
