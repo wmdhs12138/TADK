@@ -55,4 +55,18 @@ grep -Fq \
     "$release_manifest" ||
     fail "release/manifest.json does not reference the current version"
 
+for package_contract_field in \
+    '"version": 1' \
+    '"full_archive": "TADK-{version}.zip"' \
+    '"update_archive": "TADK-{version}-update.zip"' \
+    '"root_directory": "TADK-{version}"' \
+    '"checksum": "SHA-256"' \
+    '"payload": "tracked-files"' \
+    '"update_scope": "changed-tracked-files"' \
+    '".git/"' \
+    '".tadk/"'; do
+    grep -Fq "$package_contract_field" "$release_manifest" ||
+        fail "release package contract is missing: $package_contract_field"
+done
+
 printf 'PASS: version consistency\n'
