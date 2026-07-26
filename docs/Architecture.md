@@ -38,6 +38,14 @@ Configured module and variant values are used by `build`, `install`,
 options take precedence. Projects without a configuration file retain
 the legacy project-wide compatibility behavior.
 
+## Doctor diagnostics
+
+`commands/doctor.sh` delegates environment checks to `lib/doctor.sh`. Text is
+the default presentation. Passing `--json` selects a versioned, single-object
+JSON response containing the project root, overall status, exit code, summary
+counters, and ordered check results. The check functions remain shared by
+both formats so their detection and exit semantics stay aligned.
+
 ## Workflow Engine
 
 `lib/workflow.sh` is a business-agnostic sequential step runner. Its

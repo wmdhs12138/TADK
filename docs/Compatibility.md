@@ -12,6 +12,18 @@ TADK separates stable public contracts from implementation details.
 - Existing projects without `.tadk/project.conf`, which retain legacy
   project-wide build and APK resolution behavior.
 
+## Machine-readable diagnostics
+
+`tadk doctor --json [PROJECT_ROOT]` emits one JSON object and keeps the same
+exit status rules as text mode.
+
+- `version` is the diagnostics schema version and is currently `1`.
+- `status` is `pass`, `warn`, or `fail`.
+- `checks` is ordered; each item contains a `status` and a human-readable
+  `message`.
+- `exit_code` is `0` when no hard check fails and `1` otherwise.
+- Text output remains the default and is unchanged.
+
 ## Change policy
 
 - New commands, options, and fields are additive when practical.

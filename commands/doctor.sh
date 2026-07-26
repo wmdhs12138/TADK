@@ -11,7 +11,7 @@ source "$TADK_ROOT/lib/doctor.sh"
 usage() {
     cat <<'HELP'
 用法：
-  tadk doctor [PROJECT_ROOT]
+  tadk doctor [--json] [PROJECT_ROOT]
 
 说明：
   检查 Termux Android 开发环境和 Android 项目配置。
@@ -23,6 +23,7 @@ usage() {
 
 选项：
   -h, --help            显示帮助
+  --json                输出机器可读的 JSON 结果
 
 示例：
   tadk doctor
@@ -30,6 +31,22 @@ usage() {
   tadk doctor ~/projects/MyApp
 HELP
 }
+
+JSON_OUTPUT=false
+NORMALIZED_ARGS=()
+
+for argument in "$@"; do
+    case "$argument" in
+        --json)
+            JSON_OUTPUT=true
+            ;;
+        *)
+            NORMALIZED_ARGS+=("$argument")
+            ;;
+    esac
+done
+
+set -- "${NORMALIZED_ARGS[@]}"
 
 if (( $# > 1 )); then
     tadk_error "doctor 最多接受一个项目目录参数"
@@ -62,4 +79,8 @@ if [[ -d "$PROJECT_ROOT" ]]; then
     PROJECT_ROOT="$(cd -- "$PROJECT_ROOT" && pwd)"
 fi
 
-doctor_run "$PROJECT_ROOT"
+if [[ "$JSON_OUTPUT" == true ]]; then
+    doctor_run "$PROJECT_ROOT" json
+else
+    doctor_run "$PROJECT_ROOT"
+fi
