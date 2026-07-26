@@ -43,6 +43,11 @@ archive without changing the target directory:
 ```bash
 test "$(sha256sum "$TADK_ARCHIVE" | awk '{print $1}')" = "$TADK_SHA256"
 
+if [[ -x "$TADK_ROOT/bin/tadk" ]]; then
+    "$TADK_ROOT/bin/tadk" self-update --check "$TADK_ARCHIVE" \
+        --sha256 "$TADK_SHA256"
+fi
+
 STAGE="$(mktemp -d "$HOME/tmp/tadk-package.XXXXXX")"
 trap 'rm -rf -- "$STAGE"' EXIT
 unzip -q "$TADK_ARCHIVE" -d "$STAGE"

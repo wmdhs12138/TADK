@@ -33,8 +33,10 @@ which installs an APK onto an Android device.
 
 1. Download the full or update archive and its published SHA-256 checksum.
 2. Confirm the archive name, checksum, and top-level directory.
-3. Extract into a temporary directory and confirm `VERSION` plus the release
-   manifest before touching the target TADK directory.
+3. For an existing installation, run the read-only
+   `tadk self-update --check ARCHIVE --sha256 HASH` preflight. For a new
+   installation, extract into a temporary directory and confirm `VERSION`
+   plus the release manifest before touching the target TADK directory.
 4. Make a backup outside the target directory. The backup must include local
    `.tadk/` state, repository metadata, build outputs, and signing material.
 5. Copy the archive payload into the target. Never remove the target first;
@@ -44,6 +46,6 @@ which installs an APK onto an Android device.
 7. Keep the backup until both checks pass. If either check fails, stop using
    the target and restore the backup before retrying.
 
-The next implementation slice can add a read-only preflight command against
-this contract. A self-updater should not be added until archive verification,
-preserved paths, and rollback behavior can be tested independently.
+The read-only preflight is intentionally separate from applying an update. The
+next implementation slice can add an explicit apply mode only after archive
+verification, preserved paths, and rollback behavior are tested independently.

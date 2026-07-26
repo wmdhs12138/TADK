@@ -17,14 +17,15 @@
   now available as well. The next priority is the installation/update
   workflow. The package naming, archive layout, checksum, preservation, and
   manual rollback contract are now defined in `release/manifest.json`,
-  `docs/Release.md`, and `APPLY.md`.
+  `docs/Release.md`, and `APPLY.md`. The read-only
+  `tadk self-update --check` preflight is now available.
 
 ## Beta target
 
 - **0.3.0-beta.1:** stabilize public command and library contracts,
   document compatibility guarantees, complete machine-readable diagnostics,
-  and implement a tested installation/update workflow on top of the package
-  contract.
+  and implement a tested apply/rollback workflow on top of the package
+  contract and preflight checks.
 
 Plugin discovery, retries, and parallel workflows remain deferred until
 the current command and Workflow contracts are stable.
