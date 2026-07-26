@@ -23,22 +23,24 @@ on ARM64 Android devices.
 - Existing-project initialization with `.tadk/project.conf`
 - Configured module and variant support across build/install/run/dev
 - Environment diagnostics through `tadk doctor`
+- English and Simplified Chinese command-line output
+- Zsh completion generation and one-command installation
 
 ## Project status
 
-Current development version: `0.3.0-alpha.19`
+Current development version: `0.3.0-alpha.20`
 
-Alpha.18 adds persistent Android project configuration. TADK can now
-initialize existing projects and consistently apply the configured
-module and variant across build, install, run and development workflows.
+Alpha.20 adds English and Simplified Chinese command-line resources, native
+Zsh completion generation, and an idempotent completion installer for Termux.
+The installer writes a managed `.zshrc` block, backs up an existing
+configuration before changing it, and explicitly binds `_tadk` even when the
+shell completion system was initialized earlier by a framework or theme.
 
-The development branch also includes ADB device workflows and the
-Release signing toolchain used to inspect, configure and verify Release
-APKs. The current hardening work adds explicit/nested module selection and
-recoverable Release bootstrap setup.
+The existing project configuration, ADB device, Release signing, Workflow,
+diagnostics, and transactional self-update contracts remain available.
 
-This is an alpha release intended for development and deployment in
-Termux on ARM64 Android devices.
+This is an alpha release intended for development and deployment in Termux on
+ARM64 Android devices.
 
 ## Language support
 
@@ -50,6 +52,20 @@ TADK supports English and Simplified Chinese command-line output. Set
 
 Language resources are stored in [`language/`](language/). When `TADK_LANG`
 is not set, TADK follows the shell locale and falls back to Simplified Chinese.
+
+## Zsh completion
+
+Generate the completion script on standard output:
+
+    tadk completion zsh
+
+Install it and configure Zsh in one step:
+
+    tadk completion install zsh
+    exec zsh
+
+The installer is safe to run repeatedly. It manages one marked block in
+`.zshrc` and creates a timestamped backup before changing an existing file.
 
 ## Install and update TADK
 

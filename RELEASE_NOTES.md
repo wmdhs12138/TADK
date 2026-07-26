@@ -1,208 +1,81 @@
-# TADK 0.3.0-alpha.19
+# TADK 0.3.0-alpha.20
 
-Alpha.19 keeps the runtime focused on functional Android development
-commands and removes test-only code from the mainline.
-
-The previous Alpha.18 release introduced persistent Android project
-configuration and connected
-it to TADK's primary development workflows.
-
-The current `develop` line also includes ADB device workflows and Release
-signing tools. This working tree adds explicit and nested module selection to
-`tadk init`, plus `tadk release bootstrap --dry-run` and automatic rollback
-when a later signing step fails.
+Alpha.20 improves the day-to-day command-line experience in Termux with
+bilingual output and reliable native Zsh completion.
 
 ## Highlights
 
-### Initialize an existing Android project
+### English and Simplified Chinese CLI
 
-TADK now provides:
+TADK now loads English or Simplified Chinese command resources according to
+`TADK_LANG` or the active shell locale:
 
-    tadk init
+    TADK_LANG=en tadk --help
+    TADK_LANG=zh-CN tadk --help
 
-The command validates the Android Gradle project and creates:
+When no supported locale is available, TADK keeps the existing Simplified
+Chinese fallback.
 
-    .tadk/project.conf
+### Native Zsh completion
 
-The generated configuration records the selected Android application
-module and default build variant:
+Generate a completion script without modifying the system:
 
-    version=1
-    module=app
-    variant=debug
+    tadk completion zsh
 
-Existing configuration is protected from accidental replacement.
-Intentional regeneration is available through:
+The generated completion covers top-level commands, `release` and `config`
+actions, common options, APK and archive paths, keystores, Logcat formats, and
+authorized ADB device serials.
 
-    tadk init --force
+### One-command completion installation
 
-### Safe project configuration reader
+Install completion and configure Zsh with:
 
-Alpha.18 adds a reusable configuration reader that:
+    tadk completion install zsh
+    exec zsh
 
-- locates `.tadk/project.conf` relative to the project root;
-- parses only supported keys;
-- rejects duplicate or unknown keys;
-- rejects malformed assignments;
-- validates the configuration version;
-- validates module and variant values;
-- distinguishes an absent configuration from invalid configuration;
-- avoids evaluating configuration as shell code.
+The installer:
 
-The public configuration state includes:
+- installs `_tadk` in the Termux Zsh `site-functions` directory;
+- writes one marked and managed block to `.zshrc`;
+- creates a timestamped backup before changing an existing configuration;
+- can be run repeatedly without duplicating configuration;
+- migrates the earlier manual TADK completion snippet;
+- explicitly binds `_tadk` when completion was initialized earlier by a theme
+  or shell framework.
 
-    TADK_CONFIG_VERSION
-    TADK_CONFIG_MODULE
-    TADK_CONFIG_VARIANT
+### Reproducible release archives
 
-### Configured build workflow
+`scripts/package-release.sh` creates the package-contract archives and their
+SHA-256 checksum file from committed Git content. The update archive is built
+from tracked files changed since an explicit previous release ref.
 
-`tadk build` now uses the configured module and variant.
+## Existing functionality
 
-Given:
-
-    version=1
-    module=mobile
-    variant=release
-
-TADK executes:
-
-    :mobile:assembleRelease
-
-The resulting APK is resolved only from:
-
-    mobile/build/outputs/apk/release
-
-This prevents another Android module's APK from being selected.
-
-### Configured installation
-
-`tadk install` now applies the same project configuration when no
-explicit APK path is supplied.
-
-The resolution precedence is:
-
-    explicit APK path
-        > configured module
-        > project-wide compatibility search
-
-Variant precedence is:
-
-    --debug / --release
-        > configured variant
-        > default debug
-
-Explicit APK installation remains supported:
-
-    tadk install --apk ./path/to/application.apk
-
-### Configured run workflow
-
-`tadk run` now uses:
-
-- module-qualified Gradle tasks;
-- the configured build variant;
-- module-scoped APK resolution;
-- the existing Workflow Engine stages.
-
-Existing run modes remain available:
-
-    tadk run
-    tadk run --build-only
-    tadk run --install
-    tadk run --open
-
-### Development workflow inheritance
-
-`tadk dev` remains an orchestration command. It does not duplicate
-configuration parsing.
-
-Previously, `tadk dev` always forwarded `--debug`, which overrode a
-configured Release variant.
-
-Alpha.18 changes the forwarding rule:
-
-- without `--debug` or `--release`, no variant option is forwarded;
-- `tadk build` and `tadk install` read the project configuration;
-- an explicitly supplied variant is forwarded consistently to both
-  commands.
-
-For example:
-
-    tadk dev
-
-inherits the configured variant, while:
-
-    tadk dev --release
-
-explicitly selects Release.
-
-### Environment diagnostics
-
-Alpha.18 adds:
-
-    tadk doctor
-
-The command reports important Termux Android development prerequisites,
-including TADK, Java, Android SDK, Gradle Wrapper and project state.
-
-### Multi-module safety
-
-Configured workflows reject invalid or missing modules before invoking
-Gradle or ADB.
-
-APK discovery stays within the configured module, reducing the risk of:
-
-- building the wrong module;
-- installing an APK produced by another module;
-- reporting an unrelated artifact as the build result.
-
-### Backward compatibility
-
-Project initialization is optional.
-
-Projects without `.tadk/project.conf` continue using the existing
-project-wide behavior:
-
-    assembleDebug
-    assembleRelease
-
-No user-facing command or option was removed.
-
-Existing support remains for:
-
-- explicit Debug and Release selection;
-- explicit APK installation;
-- Gradle argument forwarding;
-- ADB argument forwarding;
-- clean builds;
-- cache disabling;
-- task reruns;
-- build-only, open-installer and ADB installation run modes.
+Alpha.20 preserves the existing project configuration, module-scoped build and
+APK resolution, ADB device workflows, Release signing tools, Workflow-based
+run/dev orchestration, machine-readable diagnostics, and transactional
+self-update apply behavior.
 
 ## Verification
 
-Run from the TADK repository root:
+Run from the repository root:
 
+    find bin commands lib scripts -type f -name '*.sh' -exec bash -n {} +
+    bash -n bin/tadk
+    bash -n bin/newapp
     git diff --check
-    bash -n commands/init.sh
-    bash -n commands/build.sh
-    bash -n commands/install.sh
-    bash -n commands/run.sh
-    bash -n commands/dev.sh
     bin/tadk --version
-    bin/tadk --help
-    bin/tadk --version
-    bin/tadk self-update --help
+    TADK_LANG=en bin/tadk --help
+    TADK_LANG=zh-CN bin/tadk --help
+    bin/tadk completion --help
+    bin/tadk completion zsh > /tmp/_tadk
+    zsh -n /tmp/_tadk
 
 Expected version:
 
-    TADK 0.3.0-alpha.19
-
-The functional command checks should complete successfully.
+    TADK 0.3.0-alpha.20
 
 ## Platform
 
-TADK remains designed for Termux on ARM64 Android devices.
-
-This is an alpha prerelease intended for development and deployment.
+TADK remains designed for Termux on ARM64 Android devices. This is an alpha
+prerelease intended for development and deployment.

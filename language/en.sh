@@ -885,10 +885,10 @@ Options:
   -h, --help            Show this help
 
 Examples:
-  tadk self-update --check TADK-0.3.0-alpha.19-update.zip \
+  tadk self-update --check TADK-0.3.0-alpha.20-update.zip \
     --sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  tadk self-update --check TADK-0.3.0-alpha.19.zip --json
-  tadk self-update --apply TADK-0.3.0-alpha.19-update.zip \
+  tadk self-update --check TADK-0.3.0-alpha.20.zip --json
+  tadk self-update --apply TADK-0.3.0-alpha.20-update.zip \
     --sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 HELP
 )"

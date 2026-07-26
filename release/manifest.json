@@ -1,11 +1,11 @@
 {
   "name": "TADK",
-  "version": "0.3.0-alpha.19",
+  "version": "0.3.0-alpha.20",
   "channel": "alpha",
-  "build": 19,
-  "release_date": "2026-07-26",
+  "build": 20,
+  "release_date": "2026-07-27",
   "shell": "bash",
-  "focus": "project configuration, device workflows and Release signing",
+  "focus": "bilingual CLI and reliable Zsh completion",
   "package_contract": {
     "version": 1,
     "full_archive": "TADK-{version}.zip",

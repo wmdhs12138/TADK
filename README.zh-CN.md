@@ -22,17 +22,20 @@ Android 设备上创建、构建和维护现代 Android 应用。
 - 通过 `.tadk/project.conf` 初始化已有项目
 - 在 build/install/run/dev 工作流中支持已配置的模块和变体
 - 通过 `tadk doctor` 进行环境诊断
+- 英文和简体中文命令行输出
+- Zsh 补全生成及一键安装
 
 ## 项目状态
 
-当前开发版本：`0.3.0-alpha.19`
+当前开发版本：`0.3.0-alpha.20`
 
-Alpha.18 增加了持久化 Android 项目配置。TADK 现在可以初始化已有项目，
-并在构建、安装、运行和开发工作流中统一应用已配置的模块和变体。
+Alpha.20 增加英文和简体中文命令行资源、原生 Zsh 补全生成，以及面向 Termux
+的可重复执行补全安装器。安装器会写入受管理的 `.zshrc` 配置块，在修改已有
+配置前创建备份，并在 Shell 框架或主题已经提前初始化补全系统时显式绑定
+`_tadk`。
 
-开发分支还包含 ADB 设备工作流，以及用于检查、配置和验证 Release APK
-的签名工具链。当前的强化工作增加了显式/嵌套模块选择和可恢复的 Release
-初始化配置。
+已有的项目配置、ADB 设备、Release 签名、Workflow、诊断和事务式自更新契约
+保持可用。
 
 这是一个 alpha 版本，面向 ARM64 Android 设备上的 Termux 开发和部署场景。
 
@@ -46,6 +49,20 @@ TADK 支持英文和简体中文命令行输出。可以为单条命令设置 `T
 
 语言资源位于 [`language/`](language/) 目录。未设置 `TADK_LANG` 时，TADK
 会根据 Shell locale 选择语言；没有可用 locale 时默认使用简体中文。
+
+## Zsh 命令补全
+
+将补全脚本输出到标准输出：
+
+    tadk completion zsh
+
+一键安装补全并配置 Zsh：
+
+    tadk completion install zsh
+    exec zsh
+
+安装命令可以安全地重复执行。它只管理 `.zshrc` 中一个带标记的配置块，
+修改已有文件前会创建带时间戳的备份。
 
 ## 安装和更新 TADK
 

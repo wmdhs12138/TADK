@@ -25,6 +25,17 @@ Every published archive must have a SHA-256 checksum. The checksum is checked
 before extraction and the extracted `VERSION` and
 `release/manifest.json` must both match the requested release.
 
+## Build release archives
+
+Create archives only from a clean committed tree. Supply the previous release
+commit or tag so the update archive contains only changed tracked files:
+
+    scripts/package-release.sh --previous-ref <previous-release-ref>
+
+Use `--output-dir DIR` to choose another destination. The script validates the
+release metadata, rejects deleted tracked files that the additive update format
+cannot represent, verifies both archive layouts, and writes a SHA-256 sums file.
+
 ## Installation and update workflow
 
 The current supported workflow is transactional apply and is documented in

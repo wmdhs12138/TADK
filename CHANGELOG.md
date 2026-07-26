@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.0-alpha.20
+
+### Added
+
+- Added English and Simplified Chinese command-line resources with locale
+  selection through `TADK_LANG`.
+- Added `tadk completion zsh` for generating native Zsh completion.
+- Added `tadk completion install zsh` for installing `_tadk` and managing the
+  required Zsh configuration.
+- Added release archive generation through `scripts/package-release.sh`.
+
+### Changed
+
+- Shell-specific language extensions are loaded independently from the core
+  message catalog.
+- The completion installer is idempotent, migrates the earlier manual TADK
+  completion snippet, and backs up an existing `.zshrc` before modification.
+- Release documentation and verification now cover bilingual output and shell
+  completion.
+
+### Fixed
+
+- Explicitly binds `_tadk` to `tadk` when a framework or theme initialized
+  Zsh completion before TADK added its site-functions directory.
+
+### Compatibility
+
+- No existing Android development, Release signing, diagnostic, Workflow, or
+  self-update command was removed.
+- Zsh is the first supported completion shell; generated output remains
+  available for manual installation.
+
 ## 0.3.0-alpha.19
 
 ### Changed
