@@ -108,6 +108,13 @@ output="$(
         2>&1
 )"
 
+json_output="$(
+    "$TADK_ROOT/bin/tadk" \
+        devices \
+        --json \
+        2>&1
+)"
+
 assert_contains \
     "$output" \
     "MockCorp Mock Phone Pro" \
@@ -157,6 +164,46 @@ assert_contains \
     "$output" \
     "可用设备：1" \
     "应统计可用设备"
+
+assert_contains \
+    "$json_output" \
+    '"version":1' \
+    "JSON 应包含诊断版本"
+
+assert_contains \
+    "$json_output" \
+    '"status":"pass"' \
+    "有可用设备时 JSON 状态应为 pass"
+
+assert_contains \
+    "$json_output" \
+    '"summary":{"total":2,"available":1}' \
+    "JSON 应统计设备数量"
+
+assert_contains \
+    "$json_output" \
+    '"serial":"192.168.1.20:37123"' \
+    "JSON 应包含无线设备序列号"
+
+assert_contains \
+    "$json_output" \
+    '"manufacturer":"MockCorp"' \
+    "JSON 应包含设备制造商"
+
+assert_contains \
+    "$json_output" \
+    '"connection_type":"wireless"' \
+    "JSON 应使用稳定的连接类型"
+
+assert_contains \
+    "$json_output" \
+    '"state":"unauthorized"' \
+    "JSON 应包含未授权设备"
+
+assert_not_contains \
+    "$json_output" \
+    'TADK Devices' \
+    "JSON 不应混入文本标题"
 
 calls="$(cat "$MOCK_LOG")"
 
@@ -209,5 +256,41 @@ assert_contains \
     "$output" \
     "未发现 ADB 设备" \
     "没有设备时应显示明确提示"
+
+set +e
+
+json_output="$(
+    "$TADK_ROOT/bin/tadk" \
+        devices \
+        --json \
+        2>&1
+)"
+json_exit_code=$?
+
+set -e
+
+assert_failure \
+    "$json_exit_code" \
+    "没有 ADB 设备时 JSON 应失败"
+
+assert_contains \
+    "$json_output" \
+    '"status":"fail"' \
+    "没有设备时 JSON 状态应为 fail"
+
+assert_contains \
+    "$json_output" \
+    '"exit_code":1' \
+    "没有设备时 JSON 应包含失败退出码"
+
+assert_contains \
+    "$json_output" \
+    '"summary":{"total":0,"available":0}' \
+    "没有设备时 JSON 应返回空统计"
+
+assert_not_contains \
+    "$json_output" \
+    'TADK Devices' \
+    "失败 JSON 不应混入文本标题"
 
 printf 'PASS: devices command integration\n'

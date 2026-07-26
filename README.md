@@ -103,6 +103,10 @@ Inspect connected Android devices and their current state:
 
     tadk devices
 
+For scripts and CI, request a stable JSON inventory:
+
+    tadk devices --json
+
 Pair, connect or disconnect Android wireless debugging devices:
 
     tadk connect --pair HOST:PAIR_PORT
