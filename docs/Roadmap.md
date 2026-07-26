@@ -11,14 +11,14 @@
 ## Next milestone
 
 - **0.3.0-alpha.19:** stabilization before more feature expansion.
-  CI verification and the initial Workflow API compatibility contract are
-  complete. The next priorities are improved module-plugin detection and
-  broader command diagnostics.
+  CI verification, the initial Workflow API compatibility contract, and
+  improved module-plugin detection are complete. The next priority is
+  machine-readable command diagnostics.
 
 ## Beta target
 
 - **0.3.0-beta.1:** stabilize public command and library contracts,
-  document compatibility guarantees, add machine-readable diagnostics,
+  document compatibility guarantees, expand machine-readable diagnostics,
   and define the installation/update workflow.
 
 Plugin discovery, retries, and parallel workflows remain deferred until

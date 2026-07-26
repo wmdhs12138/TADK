@@ -93,6 +93,10 @@ configured correctly:
 
     tadk doctor
 
+For scripts and CI, request a stable JSON result:
+
+    tadk doctor --json
+
 ## Devices and Release signing
 
 Inspect connected Android devices and their current state:

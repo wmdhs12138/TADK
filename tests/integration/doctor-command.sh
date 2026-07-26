@@ -31,8 +31,49 @@ case_help_succeeds() {
         status=$?
 
     assert_success "$status"
-    assert_contains "$output" 'tadk doctor [PROJECT_ROOT]'
+    assert_contains "$output" 'tadk doctor [--json] [PROJECT_ROOT]'
     assert_contains "$output" 'PROJECT_ROOT'
+}
+
+case_json_option_returns_json() {
+    local parent project output status=0
+
+    parent="$(mktemp -d)"
+    trap 'rm -rf "$parent"' RETURN
+
+    project="$parent/project"
+
+    mkdir -p \
+        "$project/app/src/main" \
+        "$project/app/build/outputs/apk" \
+        "$project/android-sdk"
+
+    cat > "$project/gradlew" <<'GRADLEW'
+#!/usr/bin/env bash
+exit 0
+GRADLEW
+
+    chmod +x "$project/gradlew"
+
+    cat > "$project/app/src/main/AndroidManifest.xml" <<'MANIFEST'
+<manifest package="com.example.app" />
+MANIFEST
+
+    output="$(
+        PREFIX='/data/data/com.termux/files/usr' \
+        ANDROID_HOME="$project/android-sdk" \
+        "$TADK_ROOT/bin/tadk" doctor --json "$project" 2>&1
+    )" || status=$?
+
+    if (( status != 0 && status != 1 )); then
+        printf 'unexpected Doctor JSON status: %s\n' "$status" >&2
+        return 1
+    fi
+
+    assert_contains "$output" '"version":1'
+    assert_contains "$output" '"project_root":"'
+    assert_contains "$output" '"checks":['
+    assert_not_contains "$output" 'TADK doctor'
 }
 
 case_too_many_arguments_return_64() {
@@ -119,6 +160,10 @@ MANIFEST
 run_case \
     'help succeeds' \
     case_help_succeeds
+
+run_case \
+    'JSON option returns JSON' \
+    case_json_option_returns_json
 
 run_case \
     'too many arguments return 64' \

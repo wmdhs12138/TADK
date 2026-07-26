@@ -6,7 +6,7 @@
 # Do not enable set -e here because it would affect the caller.
 #
 # Public API:
-#   doctor_run PROJECT_ROOT
+#   doctor_run PROJECT_ROOT [FORMAT]
 #
 # Exit codes:
 #   0   no hard failures were found
@@ -22,6 +22,10 @@ readonly TADK_DOCTOR_SH_LOADED=1
 DOCTOR_PASSED=0
 DOCTOR_WARNINGS=0
 DOCTOR_FAILED=0
+DOCTOR_FORMAT=text
+DOCTOR_PROJECT_ROOT=''
+declare -a DOCTOR_RESULT_STATUS=()
+declare -a DOCTOR_RESULT_MESSAGES=()
 
 doctor_command_path() {
     if (( $# != 1 )); then
@@ -43,21 +47,64 @@ _doctor_reset() {
     DOCTOR_PASSED=0
     DOCTOR_WARNINGS=0
     DOCTOR_FAILED=0
+    DOCTOR_FORMAT=text
+    DOCTOR_PROJECT_ROOT=''
+    DOCTOR_RESULT_STATUS=()
+    DOCTOR_RESULT_MESSAGES=()
+}
+
+_doctor_record() {
+    if (( $# != 2 )); then
+        return 64
+    fi
+
+    if [[ "$DOCTOR_FORMAT" == json ]]; then
+        DOCTOR_RESULT_STATUS+=("$1")
+        DOCTOR_RESULT_MESSAGES+=("$2")
+    fi
+}
+
+_doctor_json_escape() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local value="$1"
+
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\t'/\\t}"
+
+    printf '%s' "$value"
 }
 
 _doctor_pass() {
     DOCTOR_PASSED=$((DOCTOR_PASSED + 1))
-    printf 'PASS  %s\n' "$1"
+    _doctor_record pass "$1"
+
+    if [[ "$DOCTOR_FORMAT" != json ]]; then
+        printf 'PASS  %s\n' "$1"
+    fi
 }
 
 _doctor_warn() {
     DOCTOR_WARNINGS=$((DOCTOR_WARNINGS + 1))
-    printf 'WARN  %s\n' "$1"
+    _doctor_record warn "$1"
+
+    if [[ "$DOCTOR_FORMAT" != json ]]; then
+        printf 'WARN  %s\n' "$1"
+    fi
 }
 
 _doctor_fail() {
     DOCTOR_FAILED=$((DOCTOR_FAILED + 1))
-    printf 'FAIL  %s\n' "$1"
+    _doctor_record fail "$1"
+
+    if [[ "$DOCTOR_FORMAT" != json ]]; then
+        printf 'FAIL  %s\n' "$1"
+    fi
 }
 
 _doctor_check_termux() {
@@ -245,7 +292,49 @@ _doctor_check_apk_output() {
     fi
 }
 
+_doctor_print_json() {
+    local overall_status=pass
+    local exit_code=0
+    local escaped_project_root escaped_message index
+
+    if (( DOCTOR_FAILED != 0 )); then
+        overall_status=fail
+        exit_code=1
+    elif (( DOCTOR_WARNINGS != 0 )); then
+        overall_status=warn
+    fi
+
+    escaped_project_root="$(_doctor_json_escape "$DOCTOR_PROJECT_ROOT")"
+
+    printf '{"version":1,"project_root":"%s","status":"%s",' \
+        "$escaped_project_root" "$overall_status"
+    printf '"exit_code":%s,"summary":{"passed":%s,"warnings":%s,"failed":%s},' \
+        "$exit_code" \
+        "$DOCTOR_PASSED" \
+        "$DOCTOR_WARNINGS" \
+        "$DOCTOR_FAILED"
+    printf '"checks":['
+
+    for index in "${!DOCTOR_RESULT_STATUS[@]}"; do
+        if (( index > 0 )); then
+            printf ','
+        fi
+
+        escaped_message="$(_doctor_json_escape "${DOCTOR_RESULT_MESSAGES[$index]}")"
+        printf '{"status":"%s","message":"%s"}' \
+            "${DOCTOR_RESULT_STATUS[$index]}" \
+            "$escaped_message"
+    done
+
+    printf ']}\n'
+}
+
 _doctor_print_summary() {
+    if [[ "$DOCTOR_FORMAT" == json ]]; then
+        _doctor_print_json
+        return
+    fi
+
     printf '\nDoctor summary\n'
     printf 'Passed: %s\n' "$DOCTOR_PASSED"
     printf 'Warnings: %s\n' "$DOCTOR_WARNINGS"
@@ -253,28 +342,47 @@ _doctor_print_summary() {
 }
 
 doctor_run() {
-    if (( $# != 1 )); then
-        printf 'doctor: usage: doctor_run PROJECT_ROOT\n' >&2
+    if (( $# < 1 || $# > 2 )); then
+        printf 'doctor: usage: doctor_run PROJECT_ROOT [FORMAT]\n' >&2
         return 64
     fi
 
     local project_root="$1"
+    local format="${2:-text}"
+
+    case "$format" in
+        text|json)
+            ;;
+        *)
+            printf 'doctor: unsupported format: %s\n' "$format" >&2
+            return 64
+            ;;
+    esac
 
     if [[ -z "$project_root" ]]; then
         printf 'doctor: PROJECT_ROOT must not be empty\n' >&2
         return 64
     fi
 
+    _doctor_reset
+    DOCTOR_FORMAT="$format"
+    DOCTOR_PROJECT_ROOT="$project_root"
+
     if [[ ! -d "$project_root" ]]; then
-        printf 'doctor: project root does not exist: %s\n' \
-            "$project_root" >&2
+        if [[ "$DOCTOR_FORMAT" == json ]]; then
+            _doctor_fail "project root does not exist: $project_root"
+            _doctor_print_summary
+        else
+            printf 'doctor: project root does not exist: %s\n' \
+                "$project_root" >&2
+        fi
         return 1
     fi
 
-    _doctor_reset
-
-    printf 'TADK doctor\n'
-    printf '%s\n' '----------------------------------------'
+    if [[ "$DOCTOR_FORMAT" != json ]]; then
+        printf 'TADK doctor\n'
+        printf '%s\n' '----------------------------------------'
+    fi
 
     _doctor_check_termux
     _doctor_check_bash

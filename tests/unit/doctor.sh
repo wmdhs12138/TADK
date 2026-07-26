@@ -79,7 +79,7 @@ case_requires_one_argument() {
     output="$(doctor_run 2>&1)" || status=$?
 
     assert_equals '64' "$status"
-    assert_contains "$output" 'usage: doctor_run PROJECT_ROOT'
+    assert_contains "$output" 'usage: doctor_run PROJECT_ROOT [FORMAT]'
 }
 
 case_missing_project_root_fails() {
@@ -121,6 +121,47 @@ case_healthy_environment_passes() {
     assert_contains "$output" 'PASS  APK output directory found'
     assert_contains "$output" 'Warnings: 0'
     assert_contains "$output" 'Failed: 0'
+}
+
+case_json_output_is_machine_readable() {
+    local root output status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    create_healthy_project "$root"
+    mock_healthy_commands
+
+    export PREFIX='/data/data/com.termux/files/usr'
+    export ANDROID_HOME="$root/android-sdk"
+    unset ANDROID_SDK_ROOT
+
+    output="$(doctor_run "$root" json 2>&1)" || status=$?
+
+    assert_success "$status"
+    assert_contains "$output" '"version":1'
+    assert_contains "$output" '"project_root":"'
+    assert_contains "$output" '"status":"pass"'
+    assert_contains "$output" '"exit_code":0'
+    assert_contains "$output" '"summary":{"passed":'
+    assert_contains "$output" '"checks":['
+    assert_contains "$output" '"message":"Termux environment:'
+    assert_not_contains "$output" 'TADK doctor'
+    assert_not_contains "$output" 'PASS  '
+}
+
+case_json_missing_project_returns_failure() {
+    local root output status=0
+
+    root="$(mktemp -d)"
+    trap 'rm -rf "$root"' RETURN
+
+    output="$(doctor_run "$root/missing" json 2>&1)" || status=$?
+
+    assert_equals '1' "$status"
+    assert_contains "$output" '"status":"fail"'
+    assert_contains "$output" '"exit_code":1'
+    assert_contains "$output" 'project root does not exist'
 }
 
 case_warnings_do_not_fail_run() {
@@ -292,6 +333,14 @@ run_case \
 run_case \
     'healthy environment passes' \
     case_healthy_environment_passes
+
+run_case \
+    'JSON output is machine-readable' \
+    case_json_output_is_machine_readable
+
+run_case \
+    'JSON missing project returns failure' \
+    case_json_missing_project_returns_failure
 
 run_case \
     'warnings do not fail the run' \
