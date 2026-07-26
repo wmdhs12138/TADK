@@ -16,6 +16,10 @@ source "$TADK_ROOT/lib/release_apply.sh"
 source "$TADK_ROOT/lib/release_bootstrap.sh"
 
 ACTION=""
+RELEASE_DOCTOR_JSON=false
+RELEASE_DOCTOR_PASSED=0
+RELEASE_DOCTOR_FAILED=0
+declare -a RELEASE_DOCTOR_CHECKS=()
 APK_ARGUMENT=""
 RELEASE_BUILD_ARGS=()
 KEYSTORE_ARGUMENT=""
@@ -158,6 +162,7 @@ bootstrap 选项：
 
 示例：
   tadk release doctor
+  tadk release doctor --json
   tadk release verify
   tadk release verify app/build/outputs/apk/release/app-release.apk
   tadk release build
@@ -184,6 +189,82 @@ bootstrap 选项：
 HELP
 }
 
+_release_doctor_json_escape() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local value="$1"
+
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\t'/\\t}"
+
+    printf '%s' "$value"
+}
+
+_release_doctor_reset_json() {
+    RELEASE_DOCTOR_PASSED=0
+    RELEASE_DOCTOR_FAILED=0
+    RELEASE_DOCTOR_CHECKS=()
+}
+
+_release_doctor_record_check() {
+    if (( $# != 3 )); then
+        return 64
+    fi
+
+    local status="$1"
+    local name="$2"
+    local detail="$3"
+    local escaped_name escaped_detail record
+
+    if [[ "$status" == pass ]]; then
+        RELEASE_DOCTOR_PASSED=$((RELEASE_DOCTOR_PASSED + 1))
+    elif [[ "$status" == fail ]]; then
+        RELEASE_DOCTOR_FAILED=$((RELEASE_DOCTOR_FAILED + 1))
+    fi
+
+    escaped_name="$(_release_doctor_json_escape "$name")"
+    escaped_detail="$(_release_doctor_json_escape "$detail")"
+    printf -v record \
+        '{"name":"%s","status":"%s","detail":"%s"}' \
+        "$escaped_name" \
+        "$status" \
+        "$escaped_detail"
+    RELEASE_DOCTOR_CHECKS+=("$record")
+}
+
+_release_doctor_print_json() {
+    local overall_status=pass
+    local exit_code=0
+    local index
+
+    if (( RELEASE_DOCTOR_FAILED != 0 )); then
+        overall_status=fail
+        exit_code=1
+    fi
+
+    printf '{"version":1,"status":"%s","exit_code":%s,' \
+        "$overall_status" \
+        "$exit_code"
+    printf '"summary":{"passed":%s,"warnings":0,"failed":%s},"checks":[' \
+        "$RELEASE_DOCTOR_PASSED" \
+        "$RELEASE_DOCTOR_FAILED"
+
+    for index in "${!RELEASE_DOCTOR_CHECKS[@]}"; do
+        if (( index > 0 )); then
+            printf ','
+        fi
+
+        printf '%s' "${RELEASE_DOCTOR_CHECKS[$index]}"
+    done
+
+    printf ']}\n'
+}
+
 print_check() {
     if (( $# != 3 )); then
         tadk_error \
@@ -194,6 +275,14 @@ print_check() {
     local status="$1"
     local name="$2"
     local detail="$3"
+
+    if [[ "$RELEASE_DOCTOR_JSON" == true ]]; then
+        _release_doctor_record_check \
+            "$status" \
+            "$name" \
+            "$detail"
+        return 0
+    fi
 
     case "$status" in
         pass)
@@ -230,8 +319,12 @@ release_doctor() {
     local failure_count=0
     local resolved_path=""
 
-    tadk_heading "TADK Release Doctor"
-    tadk_separator
+    _release_doctor_reset_json
+
+    if [[ "$RELEASE_DOCTOR_JSON" != true ]]; then
+        tadk_heading "TADK Release Doctor"
+        tadk_separator
+    fi
 
     if tadk_command_exists keytool; then
         resolved_path="$(command_path keytool)"
@@ -275,15 +368,25 @@ release_doctor() {
         failure_count=$((failure_count + 1))
     fi
 
-    tadk_separator
+    if [[ "$RELEASE_DOCTOR_JSON" != true ]]; then
+        tadk_separator
+    fi
 
     if (( failure_count > 0 )); then
-        tadk_error \
-            "Release 验证环境存在 $failure_count 个问题"
+        if [[ "$RELEASE_DOCTOR_JSON" == true ]]; then
+            _release_doctor_print_json
+        else
+            tadk_error \
+                "Release 验证环境存在 $failure_count 个问题"
+        fi
         return 1
     fi
 
-    tadk_success "Release 签名验证环境可用"
+    if [[ "$RELEASE_DOCTOR_JSON" == true ]]; then
+        _release_doctor_print_json
+    else
+        tadk_success "Release 签名验证环境可用"
+    fi
 }
 
 resolve_verify_apk() {
@@ -616,8 +719,26 @@ esac
 
 case "$ACTION" in
     doctor)
-        (( $# == 0 )) ||
-            tadk_die "doctor 不接受其他参数" 64
+        while (( $# > 0 )); do
+            case "$1" in
+                --json)
+                    [[ "$RELEASE_DOCTOR_JSON" == false ]] ||
+                        tadk_die "doctor 不接受重复的 --json" 64
+                    RELEASE_DOCTOR_JSON=true
+                    ;;
+
+                -h|--help)
+                    usage
+                    exit 0
+                    ;;
+
+                *)
+                    tadk_die "doctor 不支持参数：$1" 64
+                    ;;
+            esac
+
+            shift
+        done
 
         release_doctor
         ;;

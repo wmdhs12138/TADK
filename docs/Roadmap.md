@@ -13,8 +13,9 @@
 - **0.3.0-alpha.19:** stabilization before more feature expansion.
   CI verification, the initial Workflow API compatibility contract, and
   improved module-plugin detection are complete. Machine-readable doctor and
-  device diagnostics are now available. The next priorities are release
-  diagnostics and the installation/update workflow.
+  device diagnostics are now available. Release toolchain diagnostics are
+  now available as well. The next priority is the installation/update
+  workflow.
 
 ## Beta target
 
