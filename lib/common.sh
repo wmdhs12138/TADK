@@ -17,6 +17,14 @@ fi
 
 source "$TADK_ROOT/lib/language.sh"
 
+for tadk_language_extension in \
+    "$TADK_ROOT/language/"*."$TADK_LANGUAGE".sh
+do
+    [[ -f "$tadk_language_extension" ]] || continue
+    source "$tadk_language_extension"
+done
+unset tadk_language_extension
+
 readonly TADK_COLOR_RED=$'\033[31m'
 readonly TADK_COLOR_GREEN=$'\033[32m'
 readonly TADK_COLOR_YELLOW=$'\033[33m'

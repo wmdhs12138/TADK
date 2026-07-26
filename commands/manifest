@@ -2,6 +2,7 @@
 doctor|command.doctor.description|commands/doctor.sh
 devices|command.devices.description|commands/devices.sh
 connect|command.connect.description|commands/connect.sh
+completion|command.completion.description|bin/tadk
 init|command.init.description|commands/init.sh
 config|command.config.description|commands/config.sh
 build|command.build.description|commands/build.sh

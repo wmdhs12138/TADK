@@ -58,6 +58,12 @@ case "$COMMAND" in
         printf 'TADK %s\n' "$(tadk_version)"
         exit 0
         ;;
+
+    completion)
+        source "$TADK_ROOT/lib/completion.sh"
+        tadk_completion_main "$@"
+        exit $?
+        ;;
 esac
 
 if ! tadk_command_is_valid_name "$COMMAND"; then
@@ -76,7 +82,7 @@ if [[ -z "$COMMAND_TARGET" ]]; then
 fi
 
 if [[ ! -x "$COMMAND_TARGET" ]]; then
-    tadk_die "命令不可执行：${COMMAND_TARGET#"$TADK_ROOT"/}"
+    tadk_die "$(tadk_text 'error.command_not_executable' "${COMMAND_TARGET#"$TADK_ROOT"/}")"
 fi
 
 exec "$COMMAND_TARGET" "$@"
