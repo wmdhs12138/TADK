@@ -74,12 +74,151 @@ _tadk_init_is_project_root() {
         [[ -f "$project_root/settings.gradle" ]]
 }
 
-_tadk_init_module_has_application_plugin() {
-    if (( $# != 1 )); then
+_tadk_init_version_catalog_has_application_plugin() {
+    if (( $# != 2 )); then
         return 64
     fi
 
-    local module_dir="$1"
+    local project_root="$1"
+    local alias_path="$2"
+    local catalog_path="$project_root/gradle/libs.versions.toml"
+    local normalized_alias="${alias_path//./-}"
+    local line
+    local key
+    local plugin_id
+    local in_plugins=false
+    local double_pattern='^([A-Za-z0-9_-]+)[[:space:]]*=.*id[[:space:]]*=[[:space:]]*"([^"]+)"'
+    local single_pattern="^([A-Za-z0-9_-]+)[[:space:]]*=.*id[[:space:]]*=[[:space:]]*'([^']+)'"
+
+    [[ -f "$catalog_path" ]] || return 1
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        line="${line#"${line%%[![:space:]]*}"}"
+
+        [[ -n "$line" ]] || continue
+
+        if [[ "$line" =~ ^\[plugins\][[:space:]]*$ ]]; then
+            in_plugins=true
+            continue
+        fi
+
+        if [[ "$line" =~ ^\[[^]]+\][[:space:]]*$ ]]; then
+            in_plugins=false
+            continue
+        fi
+
+        [[ "$in_plugins" == true ]] || continue
+
+        if [[ "$line" =~ $double_pattern ]]; then
+            key="${BASH_REMATCH[1]}"
+            plugin_id="${BASH_REMATCH[2]}"
+        elif [[ "$line" =~ $single_pattern ]]; then
+            key="${BASH_REMATCH[1]}"
+            plugin_id="${BASH_REMATCH[2]}"
+        else
+            continue
+        fi
+
+        if [[ ( "$key" == "$normalized_alias" || "$key" == "$alias_path" ) &&
+              "$plugin_id" == 'com.android.application' ]]; then
+            return 0
+        fi
+    done < "$catalog_path"
+
+    return 1
+}
+
+_tadk_init_build_file_has_application_plugin() {
+    if (( $# != 2 )); then
+        return 64
+    fi
+
+    local project_root="$1"
+    local build_file="$2"
+    local line
+    local alias_path
+    local plugin_id_pattern
+    local id_call_double_regex
+    local id_call_single_regex
+    local id_argument_double_regex
+    local id_argument_single_regex
+    local apply_plugin_double_regex
+    local apply_plugin_single_regex
+    local alias_regex='(^|[[:space:]])alias[[:space:]]*\([[:space:]]*libs[.]plugins[.]([A-Za-z0-9_.-]+)'
+    local in_block_comment=false
+    local -a application_plugin_patterns=(
+        'com[.]android[.]application'
+        'android[.]application'
+        'androidApplication'
+    )
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line#"${line%%[![:space:]]*}"}"
+
+        if [[ "$in_block_comment" == true ]]; then
+            if [[ "$line" == *'*/'* ]]; then
+                line="${line#*'*/'}"
+                in_block_comment=false
+                line="${line#"${line%%[![:space:]]*}"}"
+            else
+                continue
+            fi
+        fi
+
+        if [[ "$line" == '/*'* ]]; then
+            if [[ "$line" == *'*/'* ]]; then
+                line="${line#*'*/'}"
+                line="${line#"${line%%[![:space:]]*}"}"
+            else
+                in_block_comment=true
+                continue
+            fi
+        fi
+
+        [[ -n "$line" ]] || continue
+        [[ "$line" == '//'* || "$line" == '#'* || "$line" == '*'* ]] &&
+            continue
+
+        line="${line%%//*}"
+
+        for plugin_id_pattern in "${application_plugin_patterns[@]}"; do
+            id_call_double_regex="(^|[[:space:]])id[[:space:]]*\\([[:space:]]*\"$plugin_id_pattern\""
+            id_call_single_regex="(^|[[:space:]])id[[:space:]]*\\([[:space:]]*'$plugin_id_pattern'"
+            id_argument_double_regex="(^|[[:space:]])id[[:space:]]+\"$plugin_id_pattern\""
+            id_argument_single_regex="(^|[[:space:]])id[[:space:]]+'$plugin_id_pattern'"
+            apply_plugin_double_regex="(^|[[:space:]])apply[[:space:]]+plugin[[:space:]]*:[[:space:]]*\"$plugin_id_pattern\""
+            apply_plugin_single_regex="(^|[[:space:]])apply[[:space:]]+plugin[[:space:]]*:[[:space:]]*'$plugin_id_pattern'"
+
+            if [[ "$line" =~ $id_call_double_regex ||
+                  "$line" =~ $id_call_single_regex ||
+                  "$line" =~ $id_argument_double_regex ||
+                  "$line" =~ $id_argument_single_regex ||
+                  "$line" =~ $apply_plugin_double_regex ||
+                  "$line" =~ $apply_plugin_single_regex ]]; then
+                return 0
+            fi
+        done
+
+        if [[ "$line" =~ $alias_regex ]]; then
+            alias_path="${BASH_REMATCH[2]}"
+            _tadk_init_version_catalog_has_application_plugin \
+                "$project_root" \
+                "$alias_path" &&
+                return 0
+        fi
+    done < "$build_file"
+
+    return 1
+}
+
+_tadk_init_module_has_application_plugin() {
+    if (( $# != 2 )); then
+        return 64
+    fi
+
+    local project_root="$1"
+    local module_dir="$2"
     local build_file=""
 
     for build_file in \
@@ -88,8 +227,10 @@ _tadk_init_module_has_application_plugin() {
     do
         [[ -f "$build_file" ]] || continue
 
-        grep -qE 'com\.android\.application|android\.application|androidApplication' "$build_file"
-        return $?
+        _tadk_init_build_file_has_application_plugin \
+            "$project_root" \
+            "$build_file" &&
+            return 0
     done
 
     return 1
@@ -122,7 +263,9 @@ tadk_init_detect_module() {
 
         module_dir="$project_root/$requested_module"
 
-        _tadk_init_module_has_application_plugin "$module_dir" || {
+        _tadk_init_module_has_application_plugin \
+            "$project_root" \
+            "$module_dir" || {
             _init_error \
                 "module is not an Android application module: $requested_module"
             return 1
@@ -132,7 +275,9 @@ tadk_init_detect_module() {
         return 0
     fi
 
-    if _tadk_init_module_has_application_plugin "$project_root/app"; then
+    if _tadk_init_module_has_application_plugin \
+        "$project_root" \
+        "$project_root/app"; then
         printf 'app\n'
         return 0
     fi
@@ -140,7 +285,9 @@ tadk_init_detect_module() {
     while IFS= read -r build_file; do
         module_dir="$(dirname "$build_file")"
         [[ "$module_dir" != "$project_root" ]] || continue
-        _tadk_init_module_has_application_plugin "$module_dir" || continue
+        _tadk_init_module_has_application_plugin \
+            "$project_root" \
+            "$module_dir" || continue
 
         module_name="${module_dir#"$project_root"/}"
         tadk_module_validate "$module_name" || continue

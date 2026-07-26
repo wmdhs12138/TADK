@@ -28,6 +28,11 @@ Nested modules are stored as project-relative paths such as
 `feature/chat` and converted to the Gradle path `:feature:chat` for task
 execution.
 
+`tadk init` recognizes application modules declared with Kotlin or Groovy
+plugin IDs, legacy `apply plugin` syntax, and Version Catalog aliases that
+resolve to `com.android.application`. Commented plugin declarations and
+aliases that cannot be resolved to the application plugin are ignored.
+
 Configured module and variant values are used by `build`, `install`,
 `run`, `dev`, and Release APK resolution. Explicit command-line variant
 options take precedence. Projects without a configuration file retain
