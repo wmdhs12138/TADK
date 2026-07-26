@@ -5,7 +5,7 @@
 # Configuration updates are validated before writing and installed
 # atomically through a temporary file in the configuration directory.
 #
-# This file is intended to be sourced by commands and tests.
+# This file is intended to be sourced by commands.
 # Do not enable set -e here because it would affect the caller.
 #
 # Dependencies:

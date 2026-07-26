@@ -15,4 +15,3 @@ run|构建并运行当前 Android 项目|commands/run.sh
 dev|执行构建、安装、启动和日志监听开发流程|commands/dev.sh
 clean|清理当前项目构建缓存|commands/clean.sh
 info|显示当前 Android 项目信息|commands/info.sh
-test|运行 TADK 测试套件|commands/test.sh

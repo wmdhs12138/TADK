@@ -2,7 +2,7 @@
 
 # Read-only TADK package preflight helpers.
 #
-# This file is intended to be sourced by commands and tests.
+# This file is intended to be sourced by commands.
 # Do not enable set -e here because it would affect the caller.
 
 if [[ -n "${TADK_SELF_UPDATE_SH_LOADED:-}" ]]; then
@@ -490,6 +490,61 @@ tadk_self_update_apply_fail_and_rollback() {
     return "$original_status"
 }
 
+tadk_self_update_verify_installation() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local tadk_root="$1"
+    local required_file
+    local command_name
+    local description
+    local relative_target
+    local target_path
+
+    [[ -d "$tadk_root" ]] || return 1
+
+    for required_file in \
+        VERSION \
+        release/manifest.json \
+        bin/tadk \
+        commands/manifest
+    do
+        if [[ ! -f "$tadk_root/$required_file" ]]; then
+            tadk_error "安装文件缺失：$required_file"
+            return 1
+        fi
+    done
+
+    if [[ ! -x "$tadk_root/bin/tadk" ]]; then
+        tadk_error '主命令入口不可执行：bin/tadk'
+        return 1
+    fi
+
+    while IFS='|' read -r command_name description relative_target; do
+        [[ -n "$command_name" ]] || continue
+        [[ "$command_name" == \#* ]] && continue
+
+        if [[ -z "$description" || -z "$relative_target" ]]; then
+            tadk_error "命令清单条目不完整：$command_name"
+            return 1
+        fi
+
+        case "$relative_target" in
+            /*|../*|*/../*|*/..)
+                tadk_error "命令清单目标越界：$relative_target"
+                return 1
+                ;;
+        esac
+
+        target_path="$tadk_root/$relative_target"
+        if [[ ! -f "$target_path" || ! -x "$target_path" ]]; then
+            tadk_error "命令清单目标不可执行：$relative_target"
+            return 1
+        fi
+    done < "$tadk_root/commands/manifest"
+}
+
 tadk_self_update_apply() {
     if (( $# != 5 )); then
         return 64
@@ -501,7 +556,6 @@ tadk_self_update_apply() {
     local json_output="$4"
     local tadk_root="$5"
     local observed_version=""
-    local smoke_output=""
     local original_version=""
     local failure_status=0
 
@@ -580,26 +634,16 @@ tadk_self_update_apply() {
         return "$failure_status"
     fi
 
-    if [[ ! -x "$tadk_root/tests/smoke.sh" ]]; then
+    if tadk_self_update_verify_installation "$tadk_root"; then
+        tadk_self_update_record_check \
+            'post_apply_installation' \
+            pass \
+            'TADK installation files and command targets are ready'
+    else
         failure_status=1
         tadk_self_update_apply_fail_and_rollback \
-            'post_apply_smoke' \
-            'tests/smoke.sh is missing or not executable; automatic rollback started' \
-            "$original_version" \
-            "$failure_status" || true
-        return "$failure_status"
-    fi
-
-    if smoke_output="$(bash "$tadk_root/tests/smoke.sh" 2>&1)"; then
-        tadk_self_update_record_check \
-            'post_apply_smoke' \
-            pass \
-            'TADK smoke tests passed after apply'
-    else
-        failure_status=$?
-        tadk_self_update_apply_fail_and_rollback \
-            'post_apply_smoke' \
-            'TADK smoke tests failed; automatic rollback started' \
+            'post_apply_installation' \
+            'TADK installation is incomplete; automatic rollback started' \
             "$original_version" \
             "$failure_status" || true
         return "$failure_status"
