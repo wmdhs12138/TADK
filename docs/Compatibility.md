@@ -24,6 +24,11 @@ exit status rules as text mode.
 - `exit_code` is `0` when no hard check fails and `1` otherwise.
 - Text output remains the default and is unchanged.
 
+`tadk devices --json` uses the same schema version and returns a stable device
+array. Each device includes `serial`, `state`, `details`, manufacturer/model,
+Android and SDK versions, foreground package, `connection_type`, and
+`wireless_address`. The summary exposes `total` and `available` counts.
+
 ## Change policy
 
 - New commands, options, and fields are additive when practical.

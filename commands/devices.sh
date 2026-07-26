@@ -8,10 +8,13 @@ TADK_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/adb.sh"
 
+DEVICES_JSON_OUTPUT=false
+declare -a DEVICES_JSON_RECORDS=()
+
 usage() {
     cat <<'HELP'
 用法：
-  tadk devices
+  tadk devices [--json]
 
 说明：
   列出当前 ADB 可见设备，并显示设备型号、Android 版本、
@@ -24,9 +27,117 @@ usage() {
   no permissions
                 当前环境没有访问设备的权限
 
+选项：
+  -h, --help            显示帮助
+  --json                输出机器可读的 JSON 结果
+
 示例：
   tadk devices
 HELP
+}
+
+_devices_json_escape() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local value="$1"
+
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\t'/\\t}"
+
+    printf '%s' "$value"
+}
+
+_devices_append_json_record() {
+    if (( $# != 10 )); then
+        return 64
+    fi
+
+    local serial="$1"
+    local state="$2"
+    local details="$3"
+    local manufacturer="$4"
+    local model="$5"
+    local android_version="$6"
+    local sdk_version="$7"
+    local foreground_package="$8"
+    local connection_type="$9"
+    local wireless_address="${10}"
+    local escaped_serial escaped_state escaped_details
+    local escaped_manufacturer escaped_model escaped_android_version
+    local escaped_sdk_version escaped_foreground_package
+    local escaped_connection_type escaped_wireless_address
+    local record
+
+    escaped_serial="$(_devices_json_escape "$serial")"
+    escaped_state="$(_devices_json_escape "$state")"
+    escaped_details="$(_devices_json_escape "$details")"
+    escaped_manufacturer="$(_devices_json_escape "$manufacturer")"
+    escaped_model="$(_devices_json_escape "$model")"
+    escaped_android_version="$(_devices_json_escape "$android_version")"
+    escaped_sdk_version="$(_devices_json_escape "$sdk_version")"
+    escaped_foreground_package="$(_devices_json_escape "$foreground_package")"
+    escaped_connection_type="$(_devices_json_escape "$connection_type")"
+    escaped_wireless_address="$(_devices_json_escape "$wireless_address")"
+
+    printf -v record \
+        '{"serial":"%s","state":"%s","details":"%s","manufacturer":"%s","model":"%s","android_version":"%s","sdk_version":"%s","foreground_package":"%s","connection_type":"%s","wireless_address":"%s"}' \
+        "$escaped_serial" \
+        "$escaped_state" \
+        "$escaped_details" \
+        "$escaped_manufacturer" \
+        "$escaped_model" \
+        "$escaped_android_version" \
+        "$escaped_sdk_version" \
+        "$escaped_foreground_package" \
+        "$escaped_connection_type" \
+        "$escaped_wireless_address"
+
+    DEVICES_JSON_RECORDS+=("$record")
+}
+
+_devices_print_json() {
+    local overall_status=fail
+    local exit_code=1
+    local index
+
+    if (( ready_count != 0 )); then
+        overall_status=pass
+        exit_code=0
+    fi
+
+    printf '{"version":1,"status":"%s","exit_code":%s,' \
+        "$overall_status" \
+        "$exit_code"
+    printf '"summary":{"total":%s,"available":%s},"devices":[' \
+        "$device_count" \
+        "$ready_count"
+
+    for index in "${!DEVICES_JSON_RECORDS[@]}"; do
+        if (( index > 0 )); then
+            printf ','
+        fi
+
+        printf '%s' "${DEVICES_JSON_RECORDS[$index]}"
+    done
+
+    printf ']}\n'
+}
+
+_devices_print_json_failure() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local escaped_message
+    escaped_message="$(_devices_json_escape "$1")"
+
+    printf '{"version":1,"status":"fail","exit_code":1,"error":"%s","summary":{"total":0,"available":0},"devices":[]}\n' \
+        "$escaped_message"
 }
 
 adb_for_serial() {
@@ -216,6 +327,21 @@ print_device_summary() {
     local connection_type=""
     local wireless_address=""
 
+    if [[ "$DEVICES_JSON_OUTPUT" == true && "$state" != "device" ]]; then
+        _devices_append_json_record \
+            "$serial" \
+            "$state" \
+            "$details" \
+            '' \
+            '' \
+            '' \
+            '' \
+            '' \
+            '' \
+            ''
+        return 0
+    fi
+
     tadk_separator
     printf '序列号：%s\n' "$serial"
     printf '状态：%s\n' "$state"
@@ -267,6 +393,32 @@ print_device_summary() {
         device_foreground_package "$serial"
     )"
 
+    if [[ "$DEVICES_JSON_OUTPUT" == true ]]; then
+        if [[ "$serial" == *:* ]]; then
+            connection_type='wireless'
+            wireless_address="$serial"
+        else
+            connection_type='usb_or_local_adb'
+        fi
+
+        if [[ "$foreground_package" == '未知' ]]; then
+            foreground_package=''
+        fi
+
+        _devices_append_json_record \
+            "$serial" \
+            "$state" \
+            "$details" \
+            "${manufacturer:-}" \
+            "${model:-}" \
+            "${android_version:-}" \
+            "${sdk_version:-}" \
+            "${foreground_package:-}" \
+            "$connection_type" \
+            "$wireless_address"
+        return 0
+    fi
+
     connection_type="$(
         device_connection_type "$serial"
     )"
@@ -290,29 +442,50 @@ print_device_summary() {
     printf '前台应用：%s\n' "$foreground_package"
 }
 
-if (( $# > 0 )); then
+while (( $# > 0 )); do
     case "$1" in
         -h|--help)
             usage
             exit 0
             ;;
+        --json)
+            DEVICES_JSON_OUTPUT=true
+            ;;
         *)
             tadk_die "未知参数：$1"
             ;;
     esac
+
+    shift
+done
+
+if [[ "$DEVICES_JSON_OUTPUT" == true ]]; then
+    if ! tadk_command_exists adb; then
+        _devices_print_json_failure 'ADB command not found'
+        exit 1
+    fi
+else
+    tadk_adb_require_command
 fi
 
-tadk_adb_require_command
-
-devices_output="$(
-    adb devices -l
-)"
+if [[ "$DEVICES_JSON_OUTPUT" == true ]]; then
+    if ! devices_output="$(adb devices -l 2>/dev/null)"; then
+        _devices_print_json_failure 'adb devices failed'
+        exit 1
+    fi
+else
+    devices_output="$(
+        adb devices -l
+    )"
+fi
 
 device_count=0
 ready_count=0
 
-tadk_heading "TADK Devices"
-printf '\n'
+if [[ "$DEVICES_JSON_OUTPUT" != true ]]; then
+    tadk_heading "TADK Devices"
+    printf '\n'
+fi
 
 while IFS= read -r line; do
     line="${line%$'\r'}"
@@ -339,6 +512,16 @@ while IFS= read -r line; do
         "${state:-unknown}" \
         "${details:-}"
 done <<< "$devices_output"
+
+if [[ "$DEVICES_JSON_OUTPUT" == true ]]; then
+    _devices_print_json
+
+    if (( ready_count == 0 )); then
+        exit 1
+    fi
+
+    exit 0
+fi
 
 if (( device_count == 0 )); then
     tadk_warn "未发现 ADB 设备"

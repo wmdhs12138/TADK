@@ -46,6 +46,11 @@ JSON response containing the project root, overall status, exit code, summary
 counters, and ordered check results. The check functions remain shared by
 both formats so their detection and exit semantics stay aligned.
 
+`commands/devices.sh` follows the same pattern for ADB inventory. Its JSON
+mode keeps device metadata in English, machine-oriented field names and
+returns one object even when no authorized device is available. Text mode
+continues to provide the existing operator-oriented guidance.
+
 ## Workflow Engine
 
 `lib/workflow.sh` is a business-agnostic sequential step runner. Its
