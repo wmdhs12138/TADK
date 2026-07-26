@@ -19,9 +19,23 @@ TADK_SELF_UPDATE_ARCHIVE_VERSION=""
 TADK_SELF_UPDATE_ARCHIVE_SHA256=""
 TADK_SELF_UPDATE_CURRENT_VERSION=""
 TADK_SELF_UPDATE_STAGE=""
+TADK_SELF_UPDATE_PAYLOAD=""
+TADK_SELF_UPDATE_KEEP_STAGE=false
 TADK_SELF_UPDATE_PASSED=0
 TADK_SELF_UPDATE_WARNINGS=0
 TADK_SELF_UPDATE_FAILED=0
+TADK_SELF_UPDATE_CACHE_ROOT=""
+TADK_SELF_UPDATE_LOCK_DIR=""
+TADK_SELF_UPDATE_LOCK_ACQUIRED=false
+TADK_SELF_UPDATE_BACKUP_DIR=""
+TADK_SELF_UPDATE_BACKUP_DIR_CREATED=false
+TADK_SELF_UPDATE_BACKUP_COMPLETE=false
+TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
+TADK_SELF_UPDATE_ROLLBACK_IN_PROGRESS=false
+TADK_SELF_UPDATE_ROLLBACK_DONE=false
+TADK_SELF_UPDATE_APPLY_COMPLETED=false
+TADK_SELF_UPDATE_INTERRUPTED=false
+TADK_SELF_UPDATE_JSON_EMITTED=false
 declare -a TADK_SELF_UPDATE_CHECKS=()
 
 tadk_self_update_reset() {
@@ -31,9 +45,12 @@ tadk_self_update_reset() {
     TADK_SELF_UPDATE_ARCHIVE_SHA256=""
     TADK_SELF_UPDATE_CURRENT_VERSION=""
     TADK_SELF_UPDATE_STAGE=""
+    TADK_SELF_UPDATE_PAYLOAD=""
+    TADK_SELF_UPDATE_KEEP_STAGE=false
     TADK_SELF_UPDATE_PASSED=0
     TADK_SELF_UPDATE_WARNINGS=0
     TADK_SELF_UPDATE_FAILED=0
+    TADK_SELF_UPDATE_JSON_EMITTED=false
     TADK_SELF_UPDATE_CHECKS=()
 }
 
@@ -113,6 +130,474 @@ tadk_self_update_record_check() {
     fi
 }
 
+tadk_self_update_resolve_path() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local requested_path="$1"
+
+    if tadk_command_exists realpath; then
+        realpath -m -- "$requested_path"
+        return $?
+    fi
+
+    if [[ -e "$requested_path" || -L "$requested_path" ]]; then
+        tadk_absolute_path "$requested_path"
+        return $?
+    fi
+
+    local parent_path
+    parent_path="$(dirname -- "$requested_path")"
+    [[ -d "$parent_path" ]] || return 1
+    printf '%s/%s\n' \
+        "$(cd -P -- "$parent_path" && pwd)" \
+        "$(basename -- "$requested_path")"
+}
+
+tadk_self_update_acquire_lock() {
+    local cache_root=""
+
+    cache_root="$(tadk_self_update_cache_root 2>/dev/null)" || {
+        tadk_self_update_record_check \
+            'lock' \
+            fail \
+            'could not create the self-update cache directory'
+        return 1
+    }
+
+    TADK_SELF_UPDATE_LOCK_DIR="$cache_root/update.lock"
+
+    if mkdir -- "$TADK_SELF_UPDATE_LOCK_DIR" 2>/dev/null; then
+        if printf '%s\n' "$$" > "$TADK_SELF_UPDATE_LOCK_DIR/pid"; then
+            TADK_SELF_UPDATE_LOCK_ACQUIRED=true
+            tadk_self_update_record_check \
+                'lock' \
+                pass \
+                'exclusive self-update lock acquired'
+            return 0
+        fi
+
+        rm -rf -- "$TADK_SELF_UPDATE_LOCK_DIR" || true
+        TADK_SELF_UPDATE_LOCK_DIR=""
+    fi
+
+    tadk_self_update_record_check \
+        'lock' \
+        fail \
+        'another self-update transaction is already in progress'
+    return 1
+}
+
+tadk_self_update_check_apply_guards() {
+    if (( $# != 2 )); then
+        return 64
+    fi
+
+    local tadk_root="$1"
+    local requested_backup_dir="$2"
+    local resolved_root=""
+    local resolved_backup=""
+    local backup_parent=""
+    local git_status=""
+
+    if [[ -L "$tadk_root" ]]; then
+        tadk_self_update_record_check \
+            'target_root' \
+            fail \
+            'TADK_ROOT must not be a symbolic link'
+        return 1
+    fi
+
+    if [[ ! -d "$tadk_root" ]]; then
+        tadk_self_update_record_check \
+            'target_root' \
+            fail \
+            "TADK_ROOT is not a directory: $tadk_root"
+        return 1
+    fi
+
+    resolved_root="$(tadk_self_update_resolve_path "$tadk_root")" || {
+        tadk_self_update_record_check \
+            'target_root' \
+            fail \
+            'could not resolve TADK_ROOT for safety checks'
+        return 1
+    }
+
+    tadk_self_update_record_check \
+        'target_root' \
+        pass \
+        "TADK_ROOT is a real directory: $resolved_root"
+
+    if [[ -e "$tadk_root/.git" || -L "$tadk_root/.git" ]]; then
+        if ! tadk_command_exists git; then
+            tadk_self_update_record_check \
+                'git_worktree' \
+                fail \
+                'git is required to verify a Git worktree is clean'
+        else
+            if git_status="$(git -C "$tadk_root" status --porcelain --untracked-files=all 2>/dev/null)"; then
+                if [[ -n "$git_status" ]]; then
+                    tadk_self_update_record_check \
+                        'git_worktree' \
+                        fail \
+                        'Git worktree is dirty; apply refuses to overwrite local changes'
+                else
+                    tadk_self_update_record_check \
+                        'git_worktree' \
+                        pass \
+                        'Git worktree is clean'
+                fi
+            else
+                tadk_self_update_record_check \
+                    'git_worktree' \
+                    fail \
+                    'could not verify Git worktree status'
+            fi
+        fi
+    else
+        tadk_self_update_record_check \
+            'git_worktree' \
+            pass \
+            'target is not a Git worktree'
+    fi
+
+    if [[ -n "$requested_backup_dir" ]]; then
+        resolved_backup="$(tadk_self_update_resolve_path "$requested_backup_dir")" || {
+            tadk_self_update_record_check \
+                'backup_location' \
+                fail \
+                'could not resolve --backup-dir'
+            return 1
+        }
+    else
+        [[ -n "$TADK_SELF_UPDATE_CACHE_ROOT" ]] || {
+            tadk_self_update_record_check \
+                'backup_location' \
+                fail \
+                'self-update cache root is unavailable'
+            return 1
+        }
+        resolved_backup="$TADK_SELF_UPDATE_CACHE_ROOT/backups/TADK-${TADK_SELF_UPDATE_ARCHIVE_VERSION}-$(date +%s)-$$-$RANDOM"
+    fi
+
+    case "$resolved_backup" in
+        "$resolved_root"|"$resolved_root"/*)
+            tadk_self_update_record_check \
+                'backup_location' \
+                fail \
+                'backup directory must be outside TADK_ROOT'
+            return 1
+            ;;
+    esac
+
+    if [[ -L "$resolved_backup" ]]; then
+        tadk_self_update_record_check \
+            'backup_location' \
+            fail \
+            'backup directory must not be a symbolic link'
+        return 1
+    fi
+
+    if [[ -e "$resolved_backup" ]]; then
+        if [[ ! -d "$resolved_backup" ]]; then
+            tadk_self_update_record_check \
+                'backup_location' \
+                fail \
+                'backup path exists but is not a directory'
+            return 1
+        fi
+
+        if [[ -n "$(find "$resolved_backup" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+            tadk_self_update_record_check \
+                'backup_location' \
+                fail \
+                'backup directory must be new or empty'
+            return 1
+        fi
+    else
+        backup_parent="$(dirname -- "$resolved_backup")"
+        if [[ -e "$backup_parent" && ! -d "$backup_parent" ]]; then
+            tadk_self_update_record_check \
+                'backup_location' \
+                fail \
+                'backup directory parent is not a directory'
+            return 1
+        fi
+    fi
+
+    TADK_SELF_UPDATE_BACKUP_DIR="$resolved_backup"
+    tadk_self_update_record_check \
+        'backup_location' \
+        pass \
+        "backup will be created outside TADK_ROOT: $resolved_backup"
+}
+
+tadk_self_update_create_backup() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local tadk_root="$1"
+    local backup_dir="$TADK_SELF_UPDATE_BACKUP_DIR"
+    local backup_parent=""
+    local backup_was_present=false
+
+    [[ -n "$backup_dir" ]] || {
+        tadk_self_update_record_check \
+            'backup' \
+            fail \
+            'backup directory was not prepared'
+        return 1
+    }
+
+    if [[ -e "$backup_dir" ]]; then
+        backup_was_present=true
+    else
+        backup_parent="$(dirname -- "$backup_dir")"
+        mkdir -p -- "$backup_parent" || {
+            tadk_self_update_record_check \
+                'backup' \
+                fail \
+                'could not create the backup directory parent'
+            return 1
+        }
+        mkdir -- "$backup_dir" || {
+            tadk_self_update_record_check \
+                'backup' \
+                fail \
+                'could not create the backup directory'
+            return 1
+        }
+        TADK_SELF_UPDATE_BACKUP_DIR_CREATED=true
+    fi
+
+    if [[ "$backup_was_present" == true &&
+          -n "$(find "$backup_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+        tadk_self_update_record_check \
+            'backup' \
+            fail \
+            'backup directory became non-empty before the snapshot was created'
+        return 1
+    fi
+
+    if cp -a -- "$tadk_root"/. "$backup_dir"/ 2>/dev/null; then
+        TADK_SELF_UPDATE_BACKUP_COMPLETE=true
+        tadk_self_update_record_check \
+            'backup' \
+            pass \
+            "complete TADK installation backup created at $backup_dir"
+        return 0
+    fi
+
+    tadk_self_update_record_check \
+        'backup' \
+        fail \
+        'could not create a complete TADK installation backup'
+    return 1
+}
+
+tadk_self_update_apply_rollback() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local original_version="$1"
+    local tadk_root="${TADK_SELF_UPDATE_APPLY_ROOT:-}"
+    local backup_dir="$TADK_SELF_UPDATE_BACKUP_DIR"
+    local child=""
+    local restore_status=0
+    local restored_version=""
+
+    if [[ "${TADK_SELF_UPDATE_ROLLBACK_IN_PROGRESS:-false}" == true ]]; then
+        return 1
+    fi
+
+    TADK_SELF_UPDATE_ROLLBACK_IN_PROGRESS=true
+
+    if [[ -z "$tadk_root" || ! -d "$tadk_root" ||
+          "$TADK_SELF_UPDATE_BACKUP_COMPLETE" != true ]]; then
+        tadk_self_update_record_check \
+            'rollback' \
+            fail \
+            'rollback could not start because the complete backup is unavailable'
+        TADK_SELF_UPDATE_ROLLBACK_IN_PROGRESS=false
+        TADK_SELF_UPDATE_ROLLBACK_DONE=true
+        return 1
+    fi
+
+    while IFS= read -r -d '' child; do
+        rm -rf -- "$child" || restore_status=1
+    done < <(find "$tadk_root" -mindepth 1 -maxdepth 1 -print0)
+
+    if (( restore_status == 0 )) &&
+       ! cp -a -- "$backup_dir"/. "$tadk_root"/ 2>/dev/null; then
+        restore_status=1
+    fi
+
+    if (( restore_status == 0 )); then
+        restored_version="$(
+            if [[ -f "$tadk_root/VERSION" ]]; then
+                tr -d '\r\n' < "$tadk_root/VERSION"
+            fi
+        )"
+        if [[ "$restored_version" != "$original_version" ]]; then
+            restore_status=1
+        fi
+    fi
+
+    if (( restore_status == 0 )); then
+        tadk_self_update_record_check \
+            'rollback' \
+            pass \
+            "automatic rollback restored TADK version $restored_version"
+    else
+        tadk_self_update_record_check \
+            'rollback' \
+            fail \
+            'automatic rollback could not restore the complete installation'
+    fi
+
+    TADK_SELF_UPDATE_ROLLBACK_IN_PROGRESS=false
+    TADK_SELF_UPDATE_ROLLBACK_DONE=true
+    TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
+    return "$restore_status"
+}
+
+tadk_self_update_apply_fail_and_rollback() {
+    if (( $# != 3 )); then
+        return 64
+    fi
+
+    local check_name="$1"
+    local detail="$2"
+    local original_version="$3"
+
+    tadk_self_update_record_check \
+        "$check_name" \
+        fail \
+        "$detail"
+
+    tadk_self_update_apply_rollback "$original_version" || true
+    return 1
+}
+
+tadk_self_update_apply() {
+    if (( $# != 5 )); then
+        return 64
+    fi
+
+    local archive="$1"
+    local expected_sha256="$2"
+    local requested_backup_dir="$3"
+    local json_output="$4"
+    local tadk_root="$5"
+    local observed_version=""
+    local smoke_output=""
+    local original_version=""
+
+    TADK_SELF_UPDATE_APPLY_ROOT="$tadk_root"
+    TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
+    TADK_SELF_UPDATE_ROLLBACK_DONE=false
+    TADK_SELF_UPDATE_APPLY_COMPLETED=false
+    TADK_SELF_UPDATE_BACKUP_COMPLETE=false
+    TADK_SELF_UPDATE_BACKUP_DIR_CREATED=false
+
+    tadk_self_update_run_check \
+        "$archive" \
+        "$expected_sha256" \
+        "$json_output" \
+        "$tadk_root" \
+        true
+
+    if (( TADK_SELF_UPDATE_FAILED != 0 )); then
+        return 1
+    fi
+
+    original_version="$TADK_SELF_UPDATE_CURRENT_VERSION"
+
+    if ! tadk_self_update_acquire_lock; then
+        return 1
+    fi
+
+    if ! tadk_self_update_check_apply_guards \
+        "$tadk_root" \
+        "$requested_backup_dir"; then
+        return 1
+    fi
+
+    if (( TADK_SELF_UPDATE_FAILED != 0 )); then
+        return 1
+    fi
+
+    if ! tadk_self_update_create_backup "$tadk_root"; then
+        return 1
+    fi
+
+    TADK_SELF_UPDATE_TRANSACTION_ACTIVE=true
+
+    if cp -a -- "$TADK_SELF_UPDATE_PAYLOAD"/. "$tadk_root"/ 2>/dev/null; then
+        tadk_self_update_record_check \
+            'apply_copy' \
+            pass \
+            'archive payload copied with additive/overwrite semantics'
+    else
+        tadk_self_update_apply_fail_and_rollback \
+            'apply_copy' \
+            'archive payload copy failed; automatic rollback started' \
+            "$original_version"
+        return 1
+    fi
+
+    observed_version="$(
+        if [[ -f "$tadk_root/VERSION" ]]; then
+            tr -d '\r\n' < "$tadk_root/VERSION"
+        fi
+    )"
+    if [[ "$observed_version" == "$TADK_SELF_UPDATE_ARCHIVE_VERSION" ]]; then
+        tadk_self_update_record_check \
+            'post_apply_version' \
+            pass \
+            "installed VERSION is $observed_version"
+    else
+        tadk_self_update_apply_fail_and_rollback \
+            'post_apply_version' \
+            "installed VERSION is ${observed_version:-missing}, expected $TADK_SELF_UPDATE_ARCHIVE_VERSION; automatic rollback started" \
+            "$original_version"
+        return 1
+    fi
+
+    if [[ ! -x "$tadk_root/tests/smoke.sh" ]]; then
+        tadk_self_update_apply_fail_and_rollback \
+            'post_apply_smoke' \
+            'tests/smoke.sh is missing or not executable; automatic rollback started' \
+            "$original_version"
+        return 1
+    fi
+
+    if smoke_output="$(bash "$tadk_root/tests/smoke.sh" 2>&1)"; then
+        tadk_self_update_record_check \
+            'post_apply_smoke' \
+            pass \
+            'TADK smoke tests passed after apply'
+    else
+        tadk_self_update_apply_fail_and_rollback \
+            'post_apply_smoke' \
+            'TADK smoke tests failed; automatic rollback started' \
+            "$original_version"
+        return 1
+    fi
+
+    TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
+    TADK_SELF_UPDATE_APPLY_COMPLETED=true
+    tadk_self_update_record_check \
+        'apply' \
+        pass \
+        "TADK self-update applied successfully; backup retained at $TADK_SELF_UPDATE_BACKUP_DIR"
+    return 0
+}
+
 tadk_self_update_manifest_version() {
     if (( $# != 1 )); then
         return 64
@@ -124,14 +609,89 @@ tadk_self_update_manifest_version() {
         head -n 1
 }
 
+tadk_self_update_cache_root() {
+    if [[ -z "${HOME:-}" ]]; then
+        return 1
+    fi
+
+    local cache_root="$HOME/.cache/tadk/self-update"
+
+    mkdir -p -- "$cache_root" || return 1
+    TADK_SELF_UPDATE_CACHE_ROOT="$cache_root"
+    printf '%s\n' "$cache_root"
+}
+
 tadk_self_update_cleanup() {
     local stage="${TADK_SELF_UPDATE_STAGE:-}"
+    local lock_dir="${TADK_SELF_UPDATE_LOCK_DIR:-}"
+    local backup_dir="${TADK_SELF_UPDATE_BACKUP_DIR:-}"
 
     if [[ -n "$stage" && -d "$stage" ]]; then
         rm -rf -- "$stage" || true
     fi
 
+    if [[ "${TADK_SELF_UPDATE_BACKUP_COMPLETE:-false}" != true &&
+          "${TADK_SELF_UPDATE_BACKUP_DIR_CREATED:-false}" == true &&
+          -n "$backup_dir" && -d "$backup_dir" ]]; then
+        rm -rf -- "$backup_dir" || true
+    fi
+
+    if [[ "${TADK_SELF_UPDATE_LOCK_ACQUIRED:-false}" == true &&
+          -n "$lock_dir" && -d "$lock_dir" ]]; then
+        rm -rf -- "$lock_dir" || true
+    fi
+
     TADK_SELF_UPDATE_STAGE=""
+    TADK_SELF_UPDATE_LOCK_DIR=""
+    TADK_SELF_UPDATE_LOCK_ACQUIRED=false
+    TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
+}
+
+tadk_self_update_handle_signal() {
+    if (( $# != 1 )); then
+        return 64
+    fi
+
+    local signal="$1"
+    local exit_code=1
+
+    case "$signal" in
+        HUP)
+            exit_code=129
+            ;;
+
+        INT)
+            exit_code=130
+            ;;
+
+        TERM)
+            exit_code=143
+            ;;
+
+        *)
+            exit_code=1
+            ;;
+    esac
+
+    TADK_SELF_UPDATE_INTERRUPTED=true
+
+    if [[ "${TADK_SELF_UPDATE_TRANSACTION_ACTIVE:-false}" == true &&
+          "${TADK_SELF_UPDATE_ROLLBACK_DONE:-false}" != true &&
+          "${TADK_SELF_UPDATE_BACKUP_COMPLETE:-false}" == true ]]; then
+        tadk_self_update_apply_rollback "$TADK_SELF_UPDATE_CURRENT_VERSION" || true
+    fi
+
+    if [[ "${TADK_SELF_UPDATE_JSON_OUTPUT:-false}" == true &&
+          "${TADK_SELF_UPDATE_JSON_EMITTED:-false}" != true ]]; then
+        tadk_self_update_record_check \
+            'signal' \
+            fail \
+            "self-update interrupted by $signal"
+        tadk_self_update_print_json
+        TADK_SELF_UPDATE_JSON_EMITTED=true
+    fi
+
+    exit "$exit_code"
 }
 
 tadk_self_update_print_json() {
@@ -189,6 +749,7 @@ tadk_self_update_print_json() {
     done
 
     printf ']}\n'
+    TADK_SELF_UPDATE_JSON_EMITTED=true
 }
 
 tadk_self_update_print_summary() {
@@ -208,7 +769,7 @@ tadk_self_update_print_summary() {
 }
 
 tadk_self_update_run_check() {
-    if (( $# != 4 )); then
+    if (( $# != 4 && $# != 5 )); then
         return 64
     fi
 
@@ -216,6 +777,7 @@ tadk_self_update_run_check() {
     local expected_sha256="$2"
     local json_output="$3"
     local tadk_root="$4"
+    local keep_stage="${5:-false}"
     local archive_path="$archive"
     local archive_manifest=""
     local archive_version=""
@@ -237,9 +799,19 @@ tadk_self_update_run_check() {
     local match=""
     local contract_missing=()
 
+    case "$keep_stage" in
+        true|false)
+            ;;
+
+        *)
+            return 64
+            ;;
+    esac
+
     tadk_self_update_reset
     TADK_SELF_UPDATE_JSON_OUTPUT="$json_output"
     TADK_SELF_UPDATE_ARCHIVE_NAME="$archive_name"
+    TADK_SELF_UPDATE_KEEP_STAGE="$keep_stage"
 
     if [[ -f "$archive" ]]; then
         archive_path="$(tadk_absolute_path "$archive" 2>/dev/null || printf '%s' "$archive")"
@@ -343,11 +915,20 @@ tadk_self_update_run_check() {
         return 0
     fi
 
-    stage="$(mktemp -d "${TMPDIR:-/tmp}/tadk-self-update.XXXXXX")" || {
+    local cache_root=""
+    cache_root="$(tadk_self_update_cache_root 2>/dev/null)" || {
         tadk_self_update_record_check \
             'archive_extract' \
             fail \
-            'could not create a temporary extraction directory'
+            'could not create the self-update cache directory under $HOME/.cache/tadk/self-update'
+        return 0
+    }
+
+    stage="$(mktemp -d "$cache_root/stage.XXXXXX")" || {
+        tadk_self_update_record_check \
+            'archive_extract' \
+            fail \
+            'could not create a temporary extraction directory under $HOME/.cache/tadk/self-update'
         return 0
     }
     TADK_SELF_UPDATE_STAGE="$stage"
@@ -401,6 +982,7 @@ tadk_self_update_run_check() {
     fi
 
     payload="$entry"
+    TADK_SELF_UPDATE_PAYLOAD="$payload"
     tadk_self_update_record_check \
         'archive_layout' \
         pass \
@@ -488,6 +1070,11 @@ tadk_self_update_run_check() {
             -name 'keystore.properties' \
         \) -print
     )
+
+    while IFS= read -r match; do
+        [[ -n "$match" ]] || continue
+        violations+=("${match#"$payload"/} (symlink)")
+    done < <(find "$payload" -type l -print)
 
     if (( ${#violations[@]} == 0 )); then
         tadk_self_update_record_check \

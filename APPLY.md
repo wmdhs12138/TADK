@@ -1,89 +1,76 @@
 # Install and update TADK in Termux
 
-This is the current manual workflow for installing TADK or applying a TADK
-update archive. The package rules are defined in
-[`docs/Release.md`](docs/Release.md) and `release/manifest.json`.
+This is the supported workflow for installing TADK or applying a TADK update
+archive. The package rules are defined in
+[docs/Release.md](docs/Release.md) and release/manifest.json.
 
-`tadk install` installs an APK on an Android device; it does not update TADK
+tadk install installs an APK on an Android device; it does not update TADK
 itself.
 
 ## Choose an archive
 
 Use a full archive for a new installation:
 
-```text
+~~~text
 TADK-<version>.zip
-```
+~~~
 
 Use an update archive for an existing installation:
 
-```text
+~~~text
 TADK-<version>-update.zip
-```
+~~~
 
-The archive must contain one top-level directory named
-`TADK-<version>`. Download the matching SHA-256 checksum from the same
-release before continuing.
+The archive must contain one top-level directory named TADK-<version>.
+Obtain the matching SHA-256 checksum from the same release before continuing.
 
 ## Apply an archive
 
-Replace the values below with the actual release, checksum, and target paths:
+Replace the values below with the actual archive, checksum, and optional
+backup path. The command always updates the TADK installation that contains
+the invoked bin/tadk; it has no arbitrary target-directory option.
 
-```bash
-export TADK_VERSION="0.3.0-alpha.18"
-export TADK_ROOT="$HOME/projects/TADK"
-export TADK_ARCHIVE="$HOME/storage/downloads/TADK-$TADK_VERSION-update.zip"
-export TADK_BACKUP="$HOME/tmp/tadk-backups/TADK-$TADK_VERSION-$(date +%Y%m%d-%H%M%S)"
+~~~bash
+export TADK_ARCHIVE="$HOME/storage/downloads/TADK-<version>-update.zip"
 export TADK_SHA256="paste-the-sha256-from-the-release-page-here"
-```
+export TADK_BACKUP="$HOME/backups/tadk-$(date +%Y%m%d-%H%M%S)"
+~~~
 
-Verify the checksum shown on the release page, then stage and validate the
-archive without changing the target directory:
+--apply requires exactly 64 hexadecimal SHA-256 characters. It reuses the
+read-only preflight and does not create the backup or modify the installation
+until every hard preflight check has passed:
 
-```bash
-test "$(sha256sum "$TADK_ARCHIVE" | awk '{print $1}')" = "$TADK_SHA256"
+~~~bash
+"$HOME/projects/TADK/bin/tadk" self-update \
+    --apply "$TADK_ARCHIVE" \
+    --sha256 "$TADK_SHA256" \
+    --backup-dir "$TADK_BACKUP"
+~~~
 
-if [[ -x "$TADK_ROOT/bin/tadk" ]]; then
-    "$TADK_ROOT/bin/tadk" self-update --check "$TADK_ARCHIVE" \
-        --sha256 "$TADK_SHA256"
-fi
+If --backup-dir is omitted, the complete backup is retained under
+$HOME/.cache/tadk/self-update/backups/. A supplied backup directory must be
+new or empty, must be outside the current TADK root, and is retained after
+the command completes. The transaction also uses
+$HOME/.cache/tadk/self-update/ for extraction, locking, and other temporary
+state; it does not use /tmp.
 
-STAGE="$(mktemp -d "$HOME/tmp/tadk-package.XXXXXX")"
-trap 'rm -rf -- "$STAGE"' EXIT
-unzip -q "$TADK_ARCHIVE" -d "$STAGE"
-PAYLOAD="$STAGE/TADK-$TADK_VERSION"
+The apply state machine is:
 
-test -f "$PAYLOAD/VERSION"
-test "$(tr -d '\r\n' < "$PAYLOAD/VERSION")" = "$TADK_VERSION"
-grep -Fq '"version": "'$TADK_VERSION'"' "$PAYLOAD/release/manifest.json"
-```
+1. Run the existing archive preflight, then acquire the exclusive update lock.
+2. Reject a symlink TADK root, a dirty Git worktree, an unsafe backup path, or
+   a concurrent update.
+3. Create a complete backup outside the target, including .git, .tadk, build
+   caches, keystores, and signing configuration.
+4. Additively/overwriting-copy the validated payload without deleting the
+   target directory.
+5. Verify VERSION and run tests/smoke.sh.
+6. On any copy or verification failure, remove the target's children and
+   restore them from the complete backup. The target directory itself is
+   preserved.
 
-Back up the existing installation before copying anything. Keep this backup
-outside `TADK_ROOT` so a later update cannot overwrite it:
-
-```bash
-mkdir -p "$TADK_BACKUP"
-if [[ -d "$TADK_ROOT" ]]; then
-    cp -a "$TADK_ROOT"/. "$TADK_BACKUP"/
-fi
-```
-
-Copy the validated payload and restore executable bits if needed:
-
-```bash
-mkdir -p "$TADK_ROOT"
-cp -a "$PAYLOAD"/. "$TADK_ROOT"/
-chmod +x "$TADK_ROOT"/bin/* "$TADK_ROOT"/commands/*.sh
-```
-
-Finally verify the installation:
-
-```bash
-"$TADK_ROOT/bin/tadk" --version
-bash "$TADK_ROOT/tests/smoke.sh"
-```
-
-If verification fails, stop using the updated tree and restore the backup
-before retrying. Do not delete `.git/`, `.tadk/`, build outputs, Gradle
-caches, keystores, or signing property files during an update. Update
-archives only overwrite files they contain; they do not remove other files.
+Use --json for one versioned machine-readable result. It reports the
+preflight, lock, backup, copy, post-apply verification, and rollback checks.
+There is intentionally no explicit rollback command in this release; a
+failed transaction rolls back automatically. A process killed with SIGKILL
+or by sudden power loss can still leave a partially copied target and retained
+lock/backup state for manual recovery.

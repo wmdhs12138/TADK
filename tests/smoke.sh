@@ -130,6 +130,9 @@ run_test "install implementation exists" \
 run_test "tadk self-update --help" \
     "$TADK_ROOT/bin/tadk" self-update --help
 
+run_test "self-update apply option documented" \
+    bash -c "'$TADK_ROOT/bin/tadk' self-update --help | grep -F -- '--apply ARCHIVE'"
+
 run_test "compat bin/self-update --help" \
     "$TADK_ROOT/bin/self-update" --help
 

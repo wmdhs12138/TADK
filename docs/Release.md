@@ -27,25 +27,29 @@ before extraction and the extracted `VERSION` and
 
 ## Installation and update workflow
 
-The current supported workflow is manual and is documented in
-[`APPLY.md`](../APPLY.md). It is intentionally separate from `tadk install`,
+The current supported workflow is transactional apply and is documented in
+[APPLY.md](../APPLY.md). It is intentionally separate from tadk install,
 which installs an APK onto an Android device.
 
 1. Download the full or update archive and its published SHA-256 checksum.
 2. Confirm the archive name, checksum, and top-level directory.
-3. For an existing installation, run the read-only
-   `tadk self-update --check ARCHIVE --sha256 HASH` preflight. For a new
-   installation, extract into a temporary directory and confirm `VERSION`
-   plus the release manifest before touching the target TADK directory.
-4. Make a backup outside the target directory. The backup must include local
-   `.tadk/` state, repository metadata, build outputs, and signing material.
-5. Copy the archive payload into the target. Never remove the target first;
-   update archives are additive/overwrite-only.
-6. Restore executable bits where the extraction tool did not preserve them,
-   then run `bin/tadk --version` and `bash tests/smoke.sh`.
-7. Keep the backup until both checks pass. If either check fails, stop using
-   the target and restore the backup before retrying.
+3. For an existing installation, run
+   tadk self-update --apply ARCHIVE --sha256 HASH, optionally supplying
+   --backup-dir DIR. For a new installation, extract into a temporary
+   directory and confirm VERSION plus the release manifest before touching
+   the target TADK directory.
+4. The apply command reuses the read-only preflight, rejects a symlink root,
+   dirty Git worktree, unsafe backup path, and concurrent transaction, then
+   creates a complete backup outside the target.
+5. The payload is copied additively/overwrite-only. The target directory is
+   never deleted during normal apply, and protected local state is not in the
+   archive payload.
+6. The command verifies VERSION and runs tests/smoke.sh after copying.
+7. Any copy or verification failure automatically restores the target from
+   the complete backup. The backup is retained for diagnostics.
 
-The read-only preflight is intentionally separate from applying an update. The
-next implementation slice can add an explicit apply mode only after archive
-verification, preserved paths, and rollback behavior are tested independently.
+All self-update extraction, lock, and temporary state is stored under
+$HOME/.cache/tadk/self-update; the implementation does not use /tmp.
+There is no explicit rollback command in this PR. SIGKILL and sudden power
+loss recovery remain outside the transaction boundary and require manual
+recovery from the retained backup.
