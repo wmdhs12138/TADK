@@ -26,44 +26,7 @@ CONFIG_LOADED=false
 RESOLVED_APK_PATH=""
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk install [选项] [APK路径]
-
-说明：
-  安装已有 APK，不执行构建，也不自动启动应用。
-
-  未指定 APK 路径时，如果项目存在 .tadk/project.conf，将从配置的
-  module 中查找 APK，并默认使用配置的 variant。
-
-选项：
-  --debug            安装最新 Debug APK
-  --release          安装最新 Release APK
-  --apk PATH         安装指定 APK
-  --device SERIAL    指定 ADB 目标设备
-  --no-reinstall     不使用 -r 覆盖安装
-  --downgrade        允许版本降级，对应 adb install -d
-  --grant            自动授予运行时权限，对应 adb install -g
-  --                  将后续参数直接传递给 adb install
-  -h, --help         显示帮助
-
-优先级：
-  指定 APK 路径
-      > 配置模块
-
-  --debug / --release
-      > project.conf 中的 variant
-      > 默认 debug
-
-示例：
-  tadk install
-  tadk install --release
-  tadk install ./app/build/outputs/apk/debug/app-debug.apk
-  tadk install --apk ./my-app.apk
-  tadk install --device 172.19.0.1:39439
-  tadk install --downgrade --grant
-  tadk install -- --user 0
-HELP
+    tadk_print_help 'help.install'
 }
 
 resolve_explicit_apk() {
@@ -241,26 +204,27 @@ INSTALL_ARGS+=("${ADB_EXTRA_ARGS[@]}")
 
 tadk_heading "TADK Install"
 tadk_separator
-printf 'APK：%s\n' "$RESOLVED_APK_PATH"
-printf '大小：%s\n' "${APK_SIZE:-未知}"
-printf '类型：%s\n' "$BUILD_TYPE"
-printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
+tadk_label apk "$RESOLVED_APK_PATH"
+tadk_label size "${APK_SIZE:-$(tadk_text 'value.unknown')}"
+tadk_label type "$BUILD_TYPE"
+tadk_label target_device "${DEVICE_SERIAL:-$(tadk_text 'value.default_device')}"
 
 if [[ -n "$APK_PATH" ]]; then
-    printf '来源：显式 APK 路径\n'
+    tadk_label source "$(tadk_text 'value.explicit_apk_path')"
 elif [[ "$CONFIG_LOADED" == true ]]; then
-    printf '配置：%s\n' "$PROJECT_ROOT/.tadk/project.conf"
-    printf '模块：%s\n' "$PROJECT_MODULE"
+    tadk_label config "$PROJECT_ROOT/.tadk/project.conf"
+    tadk_label module "$PROJECT_MODULE"
 else
-    printf '配置：未找到，使用兼容模式\n'
+    tadk_text 'state.compatibility_mode'
+    printf '\n'
 fi
 
-printf '覆盖安装：%s\n' "$REINSTALL"
-printf '允许降级：%s\n' "$ALLOW_DOWNGRADE"
-printf '自动授权：%s\n' "$GRANT_PERMISSIONS"
+tadk_label reinstall "$REINSTALL"
+tadk_label downgrade "$ALLOW_DOWNGRADE"
+tadk_label grant "$GRANT_PERMISSIONS"
 
 if (( ${#INSTALL_ARGS[@]} > 0 )); then
-    printf 'ADB 参数：'
+    tadk_text 'label.adb_arguments'
     printf '%q ' "${INSTALL_ARGS[@]}"
     printf '\n'
 fi
@@ -278,4 +242,5 @@ tadk_adb install \
 
 printf '\n'
 tadk_success "APK 安装成功"
-printf '\n完成。\n'
+tadk_text 'status.complete'
+printf '\n'

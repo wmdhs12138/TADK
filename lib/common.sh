@@ -11,6 +11,12 @@ fi
 
 readonly TADK_COMMON_SH_LOADED=1
 
+if [[ -z "${TADK_ROOT:-}" ]]; then
+    TADK_ROOT="$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+
+source "$TADK_ROOT/lib/language.sh"
+
 readonly TADK_COLOR_RED=$'\033[31m'
 readonly TADK_COLOR_GREEN=$'\033[32m'
 readonly TADK_COLOR_YELLOW=$'\033[33m'
@@ -19,46 +25,59 @@ readonly TADK_COLOR_BOLD=$'\033[1m'
 readonly TADK_COLOR_RESET=$'\033[0m'
 
 tadk_die() {
-    printf '%s错误：%s%s\n' \
+    local message="$(tadk_localize_legacy "$1")"
+
+    printf '%s%s%s%s\n' \
         "$TADK_COLOR_RED" \
-        "$1" \
+        "$(tadk_text 'prefix.error')" \
+        "$message" \
         "$TADK_COLOR_RESET" >&2
 
     exit "${2:-1}"
 }
 
 tadk_info() {
+    local message="$(tadk_localize_legacy "$1")"
+
     printf '%s→%s %s\n' \
         "$TADK_COLOR_CYAN" \
         "$TADK_COLOR_RESET" \
-        "$1"
+        "$message"
 }
 
 tadk_success() {
+    local message="$(tadk_localize_legacy "$1")"
+
     printf '%s✓%s %s\n' \
         "$TADK_COLOR_GREEN" \
         "$TADK_COLOR_RESET" \
-        "$1"
+        "$message"
 }
 
 tadk_warn() {
+    local message="$(tadk_localize_legacy "$1")"
+
     printf '%s!%s %s\n' \
         "$TADK_COLOR_YELLOW" \
         "$TADK_COLOR_RESET" \
-        "$1"
+        "$message"
 }
 
 tadk_error() {
+    local message="$(tadk_localize_legacy "$1")"
+
     printf '%s✗%s %s\n' \
         "$TADK_COLOR_RED" \
         "$TADK_COLOR_RESET" \
-        "$1" >&2
+        "$message" >&2
 }
 
 tadk_heading() {
+    local heading="$(tadk_localize_legacy "$1")"
+
     printf '\n%s%s%s\n' \
         "$TADK_COLOR_BOLD" \
-        "$1" \
+        "$heading" \
         "$TADK_COLOR_RESET"
 }
 

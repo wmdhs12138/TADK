@@ -28,57 +28,7 @@ LINES=""
 EXTRA_ARGS=()
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk logcat [选项]
-
-说明：
-  默认识别 project.conf 所指定模块的 applicationId，
-  获取应用进程 PID，并只显示该应用的日志。
-  未配置项目时继续使用兼容的全项目扫描。
-
-选项：
-  --package NAME     指定应用包名
-  --device SERIAL    指定 ADB 目标设备
-  --all              显示设备全部日志，不按应用过滤
-  --crash            显示 crash 缓冲区，并自动退出
-  --clear            读取日志前先清空缓冲区
-  --clear-only       只清空日志缓冲区，不读取日志
-  --dump             输出当前日志后退出，不持续监听
-  --lines NUMBER     只输出最近指定行数，并退出
-  --format FORMAT    设置日志格式，默认 threadtime
-  --launch           应用未运行时自动启动并等待进程
-  --restart          强制停止后重新启动应用并等待进程
-  --wait             等待应用由用户或外部事件启动
-  --raw-output       不输出 TADK 标题，便于重定向或交给 AI
-  --                 后续参数直接传递给 adb logcat
-  -h, --help         显示帮助
-
-支持的格式：
-  brief
-  process
-  tag
-  thread
-  raw
-  time
-  threadtime
-  long
-
-示例：
-  tadk logcat
-  tadk logcat --clear
-  tadk logcat --dump
-  tadk logcat --lines 100
-  tadk logcat --package com.example.app
-  tadk logcat --device 172.19.0.1:39439
-  tadk logcat --launch
-  tadk logcat --restart --clear
-  tadk logcat --wait
-  tadk logcat --all
-  tadk logcat --crash
-  tadk logcat --raw-output --lines 200 > app.log
-  tadk logcat -- --regex 'Exception|FATAL'
-HELP
+    tadk_print_help 'help.logcat'
 }
 
 resolve_package_name() {
@@ -383,7 +333,7 @@ if [[ "$CLEAR_ONLY" == true ]]; then
     if [[ "$RAW_OUTPUT" == false ]]; then
         tadk_heading "TADK Logcat"
         tadk_separator
-        printf '操作：清空日志缓冲区\n'
+        tadk_label action "$(tadk_text 'status.clear_log_buffer')"
         tadk_separator
         printf '\n'
     fi
@@ -391,7 +341,7 @@ if [[ "$CLEAR_ONLY" == true ]]; then
     tadk_adb_clear_logcat
 
     if [[ "$RAW_OUTPUT" == false ]]; then
-        tadk_success "日志缓冲区已清空"
+        tadk_success "$(tadk_text 'status.log_buffer_cleared')"
     fi
 
     exit 0
@@ -399,7 +349,7 @@ fi
 
 if [[ "$CLEAR_FIRST" == true && "$RESTART_APP" == false ]]; then
     if [[ "$RAW_OUTPUT" == false ]]; then
-        tadk_info "清空日志缓冲区"
+        tadk_info "$(tadk_text 'status.clear_log_buffer')"
     fi
 
     tadk_adb_clear_logcat
@@ -423,9 +373,10 @@ if [[ "$CRASH_MODE" == true ]]; then
     if [[ "$RAW_OUTPUT" == false ]]; then
         tadk_heading "TADK Logcat"
         tadk_separator
-        printf '模式：crash 缓冲区\n'
-        printf '格式：%s\n' "$FORMAT"
-        printf '监听：false\n'
+        tadk_text 'state.logcat_crash'
+        printf '\n'
+        tadk_label format "$FORMAT"
+        tadk_label listen false
         tadk_separator
         printf '\n'
     fi
@@ -440,9 +391,10 @@ if [[ "$SHOW_ALL" == true ]]; then
     if [[ "$RAW_OUTPUT" == false ]]; then
         tadk_heading "TADK Logcat"
         tadk_separator
-        printf '模式：设备全部日志\n'
-        printf '格式：%s\n' "$FORMAT"
-        printf '监听：%s\n' "$([[ "$DUMP_MODE" == true ]] && printf false || printf true)"
+        tadk_text 'state.logcat_all'
+        printf '\n'
+        tadk_label format "$FORMAT"
+        tadk_label listen "$([[ "$DUMP_MODE" == true ]] && printf false || printf true)"
         tadk_separator
         printf '\n'
     fi
@@ -499,16 +451,17 @@ PACKAGE_PID="$(
 if [[ "$RAW_OUTPUT" == false ]]; then
     tadk_heading "TADK Logcat"
     tadk_separator
-    printf '应用包名：%s\n' "$RESOLVED_PACKAGE_NAME"
-    printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
-    printf '进程 PID：%s\n' "$PACKAGE_PID"
-    printf '格式：%s\n' "$FORMAT"
-    printf '监听：%s\n' "$([[ "$DUMP_MODE" == true ]] && printf false || printf true)"
+    tadk_label package "$RESOLVED_PACKAGE_NAME"
+    tadk_label target_device "${DEVICE_SERIAL:-$(tadk_text 'value.default_device')}"
+    tadk_label pid "$PACKAGE_PID"
+    tadk_label format "$FORMAT"
+    tadk_label listen "$([[ "$DUMP_MODE" == true ]] && printf false || printf true)"
     tadk_separator
     printf '\n'
 
     if [[ "$DUMP_MODE" == false ]]; then
-        printf '按 Ctrl+C 停止监听。\n\n'
+        tadk_text 'status.stop_logcat'
+        printf '\n\n'
     fi
 fi
 

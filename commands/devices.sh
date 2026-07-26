@@ -12,28 +12,7 @@ DEVICES_JSON_OUTPUT=false
 declare -a DEVICES_JSON_RECORDS=()
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk devices [--json]
-
-说明：
-  列出当前 ADB 可见设备，并显示设备型号、Android 版本、
-  SDK、连接方式、无线调试地址和当前前台应用。
-
-状态说明：
-  device        设备已连接并授权
-  unauthorized  设备尚未授权当前 ADB 客户端
-  offline       设备离线
-  no permissions
-                当前环境没有访问设备的权限
-
-选项：
-  -h, --help            显示帮助
-  --json                输出机器可读的 JSON 结果
-
-示例：
-  tadk devices
-HELP
+    tadk_print_help 'help.devices'
 }
 
 _devices_json_escape() {
@@ -182,9 +161,11 @@ device_connection_type() {
     local serial="$1"
 
     if [[ "$serial" == *:* ]]; then
-        printf '无线调试\n'
+        tadk_text 'value.wireless_debug'
+        printf '\n'
     else
-        printf 'USB 或本地 ADB\n'
+        tadk_text 'value.usb_local_adb'
+        printf '\n'
     fi
 }
 
@@ -200,7 +181,8 @@ device_wireless_address() {
     if [[ "$serial" == *:* ]]; then
         printf '%s\n' "$serial"
     else
-        printf '不适用\n'
+        tadk_text 'value.not_applicable'
+        printf '\n'
     fi
 }
 
@@ -304,7 +286,8 @@ device_foreground_package() {
         return 0
     fi
 
-    printf '未知\n'
+    tadk_text 'value.not_found'
+    printf '\n'
 }
 
 print_device_summary() {
@@ -343,22 +326,22 @@ print_device_summary() {
     fi
 
     tadk_separator
-    printf '序列号：%s\n' "$serial"
-    printf '状态：%s\n' "$state"
+    tadk_label serial "$serial"
+    tadk_label state "$state"
 
     if [[ "$state" != "device" ]]; then
         [[ -z "$details" ]] ||
-            printf '详情：%s\n' "$details"
+            tadk_label details "$details"
 
         case "$state" in
             unauthorized)
-                printf '处理：请在设备上允许 USB/无线调试授权\n'
+                tadk_label action "$(tadk_text 'device.authorize_hint')"
                 ;;
             offline)
-                printf '处理：请重连设备或重启 ADB 服务\n'
+                tadk_label action "$(tadk_text 'device.reconnect_hint')"
                 ;;
             *)
-                printf '处理：请检查 ADB 连接和设备授权状态\n'
+                tadk_label action "$(tadk_text 'device.check_hint')"
                 ;;
         esac
 
@@ -427,19 +410,16 @@ print_device_summary() {
         device_wireless_address "$serial"
     )"
 
-    printf '设备：%s%s\n' \
-        "${manufacturer:-未知}" \
-        "$(
-            if [[ -n "$model" ]]; then
-                printf ' %s' "$model"
-            fi
-        )"
-
-    printf 'Android：%s\n' "${android_version:-未知}"
-    printf 'SDK：%s\n' "${sdk_version:-未知}"
-    printf '连接：%s\n' "$connection_type"
-    printf '无线地址：%s\n' "$wireless_address"
-    printf '前台应用：%s\n' "$foreground_package"
+    tadk_label device "${manufacturer:-$(tadk_text 'value.unknown')}$(
+        if [[ -n "$model" ]]; then
+            printf ' %s' "$model"
+        fi
+    )"
+    tadk_label android "${android_version:-$(tadk_text 'value.unknown')}"
+    tadk_label sdk "${sdk_version:-$(tadk_text 'value.unknown')}"
+    tadk_label connection "$connection_type"
+    tadk_label wireless_address "$wireless_address"
+    tadk_label foreground_app "$foreground_package"
 }
 
 while (( $# > 0 )); do
@@ -525,13 +505,14 @@ fi
 
 if (( device_count == 0 )); then
     tadk_warn "未发现 ADB 设备"
-    printf '请先启用无线调试并完成 ADB 连接。\n'
+    tadk_text 'device.enable_hint'
+    printf '\n'
     exit 1
 fi
 
 tadk_separator
-printf '设备总数：%d\n' "$device_count"
-printf '可用设备：%d\n' "$ready_count"
+tadk_label total_devices "$device_count"
+tadk_label available_devices "$ready_count"
 
 if (( ready_count == 0 )); then
     tadk_error "没有已连接并授权的 ADB 设备"

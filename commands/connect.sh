@@ -13,42 +13,7 @@ ADDRESS=""
 PAIRING_CODE=""
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk connect ADDRESS
-  tadk connect --pair ADDRESS
-  tadk connect --pair ADDRESS CODE
-  tadk connect --disconnect ADDRESS
-  tadk connect --disconnect-all
-
-说明：
-  管理 Android 无线调试的 ADB 配对、连接和断开。
-
-  Android 无线调试通常会分别显示：
-
-    配对地址    用于 adb pair
-    连接地址    用于 adb connect
-
-  两者端口可能不同。完成配对后，请再使用连接地址执行：
-
-    tadk connect ADDRESS
-
-操作：
-  ADDRESS                   连接无线调试设备
-  --pair ADDRESS [CODE]     配对无线调试设备
-  --disconnect ADDRESS      断开指定无线调试设备
-  --disconnect-all          断开所有 TCP/IP ADB 设备
-
-其他：
-  -h, --help                显示帮助
-
-示例：
-  tadk connect 192.168.1.8:37123
-  tadk connect --pair 192.168.1.8:41237
-  tadk connect --pair 192.168.1.8:41237 123456
-  tadk connect --disconnect 192.168.1.8:37123
-  tadk connect --disconnect-all
-HELP
+    tadk_print_help 'help.connect'
 }
 
 validate_address() {
@@ -62,12 +27,12 @@ validate_address() {
     local port=""
 
     [[ -n "$address" ]] || {
-        tadk_error "ADB 地址不能为空"
+        tadk_error "$(tadk_text 'connect.address_empty')"
         return 64
     }
 
     [[ "$address" != *[[:space:]]* ]] || {
-        tadk_error "ADB 地址不能包含空白字符：$address"
+        tadk_error "$(tadk_text 'connect.address_whitespace' "$address")"
         return 64
     }
 
@@ -76,13 +41,14 @@ validate_address() {
     elif [[ "$address" =~ ^\[[^]]+\]:([0-9]+)$ ]]; then
         port="${BASH_REMATCH[1]}"
     else
-        tadk_error "无效的 ADB 地址：$address"
-        printf '地址格式应为 HOST:PORT，例如 192.168.1.8:37123\n'
+        tadk_error "$(tadk_text 'connect.address_invalid' "$address")"
+        tadk_text 'connect.address_format'
+        printf '\n'
         return 64
     fi
 
     if (( 10#$port < 1 || 10#$port > 65535 )); then
-        tadk_error "无效的 ADB 端口：$port"
+        tadk_error "$(tadk_text 'connect.port_invalid' "$port")"
         return 64
     fi
 }
@@ -91,7 +57,7 @@ print_devices() {
     local devices_output=""
 
     printf '\n'
-    tadk_heading "当前 ADB 设备"
+    tadk_heading "$(tadk_text 'connect.devices_heading')"
     tadk_separator
 
     devices_output="$(adb devices -l)"
@@ -101,7 +67,7 @@ print_devices() {
     if ! printf '%s\n' "$devices_output" |
         sed '1d' |
         grep -q '[^[:space:]]'; then
-        tadk_warn "当前没有 ADB 设备"
+        tadk_warn "$(tadk_text 'connect.no_devices')"
     fi
 }
 
@@ -109,7 +75,7 @@ connect_device() {
     local output=""
     local status=0
 
-    tadk_info "连接无线调试设备：$ADDRESS"
+    tadk_info "$(tadk_text 'connect.connecting' "$ADDRESS")"
 
     set +e
     output="$(adb connect "$ADDRESS" 2>&1)"
@@ -129,14 +95,14 @@ connect_device() {
         return 0
     fi
 
-    tadk_warn "ADB 命令已完成，请检查返回结果"
+    tadk_warn "$(tadk_text 'connect.command_completed')"
 }
 
 pair_device() {
     local output=""
     local status=0
 
-    tadk_info "配对无线调试设备：$ADDRESS"
+    tadk_info "$(tadk_text 'connect.pairing' "$ADDRESS")"
 
     set +e
 
@@ -163,7 +129,8 @@ pair_device() {
     fi
 
     tadk_success "ADB 配对完成"
-    printf '请使用设备显示的连接地址继续执行：\n'
+    tadk_text 'connect.pair_next'
+    printf '\n'
     printf '  tadk connect HOST:PORT\n'
 }
 
@@ -171,7 +138,7 @@ disconnect_device() {
     local output=""
     local status=0
 
-    tadk_info "断开无线调试设备：$ADDRESS"
+    tadk_info "$(tadk_text 'connect.disconnecting' "$ADDRESS")"
 
     set +e
     output="$(adb disconnect "$ADDRESS" 2>&1)"
@@ -192,7 +159,7 @@ disconnect_all_devices() {
     local output=""
     local status=0
 
-    tadk_info "断开所有 TCP/IP ADB 设备"
+    tadk_info "$(tadk_text 'connect.disconnecting_all')"
 
     set +e
     output="$(adb disconnect 2>&1)"

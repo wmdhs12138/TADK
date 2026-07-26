@@ -81,29 +81,35 @@ _doctor_json_escape() {
 }
 
 _doctor_pass() {
+    local message="$(tadk_localize_legacy "$1")"
+
     DOCTOR_PASSED=$((DOCTOR_PASSED + 1))
-    _doctor_record pass "$1"
+    _doctor_record pass "$message"
 
     if [[ "$DOCTOR_FORMAT" != json ]]; then
-        printf 'PASS  %s\n' "$1"
+        printf 'PASS  %s\n' "$message"
     fi
 }
 
 _doctor_warn() {
+    local message="$(tadk_localize_legacy "$1")"
+
     DOCTOR_WARNINGS=$((DOCTOR_WARNINGS + 1))
-    _doctor_record warn "$1"
+    _doctor_record warn "$message"
 
     if [[ "$DOCTOR_FORMAT" != json ]]; then
-        printf 'WARN  %s\n' "$1"
+        printf 'WARN  %s\n' "$message"
     fi
 }
 
 _doctor_fail() {
+    local message="$(tadk_localize_legacy "$1")"
+
     DOCTOR_FAILED=$((DOCTOR_FAILED + 1))
-    _doctor_record fail "$1"
+    _doctor_record fail "$message"
 
     if [[ "$DOCTOR_FORMAT" != json ]]; then
-        printf 'FAIL  %s\n' "$1"
+        printf 'FAIL  %s\n' "$message"
     fi
 }
 
@@ -335,10 +341,14 @@ _doctor_print_summary() {
         return
     fi
 
-    printf '\nDoctor summary\n'
-    printf 'Passed: %s\n' "$DOCTOR_PASSED"
-    printf 'Warnings: %s\n' "$DOCTOR_WARNINGS"
-    printf 'Failed: %s\n' "$DOCTOR_FAILED"
+    tadk_text 'doctor.summary'
+    printf '\n'
+    tadk_text 'doctor.passed' "$DOCTOR_PASSED"
+    printf '\n'
+    tadk_text 'doctor.warnings' "$DOCTOR_WARNINGS"
+    printf '\n'
+    tadk_text 'doctor.failed' "$DOCTOR_FAILED"
+    printf '\n'
 }
 
 doctor_run() {
@@ -380,7 +390,7 @@ doctor_run() {
     fi
 
     if [[ "$DOCTOR_FORMAT" != json ]]; then
-        printf 'TADK doctor\n'
+        printf '%s\n' "$(tadk_text 'doctor.heading')"
         printf '%s\n' '----------------------------------------'
     fi
 

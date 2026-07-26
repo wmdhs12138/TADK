@@ -9,26 +9,7 @@ source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/self_update.sh"
 
 usage() {
-    cat <<'HELP'
-Usage: tadk self-update (--check ARCHIVE | --apply ARCHIVE) [options]
-
-Validate or transactionally apply a TADK full or update archive.
-
-Options:
-  --check ARCHIVE       Archive to validate
-  --apply ARCHIVE       Archive to apply to the current TADK_ROOT
-  --sha256 HASH         Expected SHA-256 checksum
-  --backup-dir DIR      Empty directory outside TADK_ROOT for the backup
-  --json                Print one machine-readable JSON result
-  -h, --help            Show this help
-
-Examples:
-  tadk self-update --check TADK-0.3.0-alpha.19-update.zip \
-    --sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  tadk self-update --check TADK-0.3.0-alpha.19.zip --json
-  tadk self-update --apply TADK-0.3.0-alpha.19-update.zip \
-    --sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-HELP
+    tadk_print_help 'help.self-update'
 }
 
 CHECK_ARCHIVE=""
@@ -186,13 +167,15 @@ fi
 
 if [[ "$JSON_OUTPUT" != true ]]; then
     if [[ "$MODE" == check ]]; then
-        tadk_heading 'TADK Self-update Preflight'
-        printf 'Archive: %s\n' "$CHECK_ARCHIVE"
-        printf 'Mode: read-only\n\n'
+        tadk_heading "$(tadk_text 'self_update.preflight_heading')"
+        tadk_label archive "$CHECK_ARCHIVE"
+        tadk_text 'self_update.read_only'
+        printf '\n\n'
     else
-        tadk_heading 'TADK Self-update Apply'
-        printf 'Archive: %s\n' "$APPLY_ARCHIVE"
-        printf 'Mode: transactional apply\n\n'
+        tadk_heading "$(tadk_text 'self_update.apply_heading')"
+        tadk_label archive "$APPLY_ARCHIVE"
+        tadk_text 'self_update.transactional'
+        printf '\n\n'
     fi
 fi
 
@@ -240,10 +223,10 @@ if [[ "$JSON_OUTPUT" == true ]]; then
     fi
 elif (( apply_status == 0 )); then
     printf '\n'
-    tadk_success 'self-update apply transaction committed'
+    tadk_success "$(tadk_text 'self_update.committed')"
 else
     printf '\n'
-    tadk_error 'self-update apply transaction failed; target was rolled back when possible'
+    tadk_error "$(tadk_text 'self_update.failed')"
 fi
 
 exit "$apply_status"

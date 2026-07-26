@@ -62,8 +62,7 @@ tadk_command_description() {
 
     [[ -n "$record" ]] || return 1
 
-    printf '%s\n' "$record" |
-        cut -d '|' -f 2
+    tadk_text "$(printf '%s\n' "$record" | cut -d '|' -f 2)"
 }
 
 tadk_command_relative_target() {
@@ -117,11 +116,13 @@ tadk_command_list() {
     manifest="$(tadk_command_manifest "$tadk_root")" ||
         return 1
 
-    awk -F '|' '
-        NF >= 3 && $1 !~ /^[[:space:]]*#/ {
-            printf "  %-12s %s\n", $1, $2
-        }
-    ' "$manifest"
+    while IFS='|' read -r command_name description_key relative_target; do
+        [[ -n "$command_name" ]] || continue
+        [[ "$command_name" == \#* ]] && continue
+        printf '  %-12s %s\n' \
+            "$command_name" \
+            "$(tadk_text "$description_key")"
+    done < "$manifest"
 }
 
 tadk_command_validate_manifest() {
@@ -129,18 +130,18 @@ tadk_command_validate_manifest() {
     local manifest=""
     local line_number=0
     local command_name=""
-    local description=""
+    local description_key=""
     local relative_target=""
     local failed=0
 
     manifest="$(tadk_command_manifest "$tadk_root")" || {
-        tadk_error "未找到命令注册表"
+        tadk_error "$(tadk_text 'command.manifest.missing')"
         return 1
     }
 
     while IFS='|' read -r \
         command_name \
-        description \
+        description_key \
         relative_target
     do
         ((line_number += 1))
@@ -150,23 +151,27 @@ tadk_command_validate_manifest() {
 
         if ! tadk_command_is_valid_name "$command_name"; then
             tadk_error \
-                "注册表第 $line_number 行命令名无效：$command_name"
+                "$(tadk_text 'command.manifest.invalid_name' "$line_number" "$command_name")"
             failed=1
         fi
 
-        if [[ -z "$description" ]]; then
+        if [[ -z "$description_key" ]]; then
             tadk_error \
-                "注册表第 $line_number 行缺少描述"
+                "$(tadk_text 'command.manifest.missing_description' "$line_number")"
+            failed=1
+        elif ! tadk_language_has_key "$description_key"; then
+            tadk_error \
+                "$(tadk_text 'command.manifest.unknown_description' "$line_number" "$description_key")"
             failed=1
         fi
 
         if [[ -z "$relative_target" ]]; then
             tadk_error \
-                "注册表第 $line_number 行缺少执行目标"
+                "$(tadk_text 'command.manifest.missing_target' "$line_number")"
             failed=1
         elif [[ ! -f "$tadk_root/$relative_target" ]]; then
             tadk_error \
-                "注册表目标不存在：$relative_target"
+                "$(tadk_text 'command.manifest.target_missing' "$relative_target")"
             failed=1
         fi
     done < "$manifest"

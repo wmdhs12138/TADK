@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-doctor|检查 Termux Android 开发环境|commands/doctor.sh
-devices|查看 ADB 设备和 Android 系统信息|commands/devices.sh
-connect|配对、连接和断开 Android 无线调试设备|commands/connect.sh
-init|初始化现有 Android 项目的 TADK 配置|commands/init.sh
-config|查看和验证 Android 项目的 TADK 配置|commands/config.sh
-build|构建当前 Android 项目的 APK|commands/build.sh
-apk|查找和列出当前项目生成的 APK|commands/apk.sh
-release|检查和验证 Android Release 签名|commands/release.sh
-install|通过 ADB 安装已有 APK|commands/install.sh
-self-update|检查 TADK 包和更新归档|commands/self-update.sh
-launch|通过 ADB 启动已安装的 Android 应用|commands/launch.sh
-logcat|查看当前 Android 应用的运行日志|commands/logcat.sh
-run|构建并运行当前 Android 项目|commands/run.sh
-dev|执行构建、安装、启动和日志监听开发流程|commands/dev.sh
-clean|清理当前项目构建缓存|commands/clean.sh
-info|显示当前 Android 项目信息|commands/info.sh
+doctor|command.doctor.description|commands/doctor.sh
+devices|command.devices.description|commands/devices.sh
+connect|command.connect.description|commands/connect.sh
+init|command.init.description|commands/init.sh
+config|command.config.description|commands/config.sh
+build|command.build.description|commands/build.sh
+apk|command.apk.description|commands/apk.sh
+release|command.release.description|commands/release.sh
+install|command.install.description|commands/install.sh
+self-update|command.self-update.description|commands/self-update.sh
+launch|command.launch.description|commands/launch.sh
+logcat|command.logcat.description|commands/logcat.sh
+run|command.run.description|commands/run.sh
+dev|command.dev.description|commands/dev.sh
+clean|command.clean.description|commands/clean.sh
+info|command.info.description|commands/info.sh

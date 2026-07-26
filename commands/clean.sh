@@ -13,16 +13,7 @@ DRY_RUN=false
 STATUS_ONLY=false
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk clean [选项]
-
-选项：
-  --deep          同时清理当前项目的 .gradle 缓存
-  --status        只显示当前项目构建缓存占用
-  --dry-run       显示将删除的内容，不实际删除
-  -h, --help      显示帮助
-HELP
+    tadk_print_help 'help.clean'
 }
 
 safe_remove() {
@@ -49,13 +40,11 @@ safe_remove() {
     [[ -e "$target" ]] || return 0
 
     if [[ "$DRY_RUN" == true ]]; then
-        printf '  将删除：%s (%s)\n' \
-            "$target" \
-            "$(tadk_human_size "$target")"
+        printf '  %s\n' \
+            "$(tadk_text 'clean.preview_item' "$target" "$(tadk_human_size "$target")")"
     else
-        printf '  删除：%s (%s)\n' \
-            "$target" \
-            "$(tadk_human_size "$target")"
+        printf '  %s\n' \
+            "$(tadk_text 'clean.remove_item' "$target" "$(tadk_human_size "$target")")"
 
         rm -rf -- "$target"
     fi
@@ -97,14 +86,14 @@ show_status() {
 
     printf '%-12s %s\n' \
         "$(tadk_format_kb "$total_kb")" \
-        "项目本地缓存总计"
+        "$(tadk_text 'label.local_cache_total')"
 
     printf '\n'
 
     if [[ -d "$HOME/.gradle/caches" ]]; then
-        printf '全局 Gradle 缓存：%s\n' \
-            "$(tadk_human_size "$HOME/.gradle/caches")"
-        printf '该目录不会被 tadk clean 删除。\n'
+        tadk_label global_gradle_cache "$(tadk_human_size "$HOME/.gradle/caches")"
+        tadk_text 'label.cache_preserved'
+        printf '\n'
     fi
 }
 
@@ -144,18 +133,22 @@ fi
 
 tadk_heading "TADK Clean"
 tadk_separator
-printf '项目：%s\n' "$PROJECT_ROOT"
+tadk_label project "$PROJECT_ROOT"
 
 if [[ "$DEEP_CLEAN" == true ]]; then
-    printf '模式：深度清理\n'
+    tadk_text 'state.deep_clean'
+    printf '\n'
 else
-    printf '模式：标准清理\n'
+    tadk_text 'state.standard_clean'
+    printf '\n'
 fi
 
 if [[ "$DRY_RUN" == true ]]; then
-    printf '执行：预览模式\n'
+    tadk_text 'state.preview'
+    printf '\n'
 else
-    printf '执行：实际删除\n'
+    tadk_text 'state.delete'
+    printf '\n'
 fi
 
 tadk_separator
@@ -193,20 +186,19 @@ if (( TARGET_COUNT == 0 )); then
     tadk_success "没有发现需要清理的项目缓存"
 elif [[ "$DRY_RUN" == true ]]; then
     tadk_info "预览完成"
-    printf '预计释放：%s\n' \
-        "$(tadk_format_kb "$TOTAL_BEFORE_KB")"
+    tadk_label released "$(tadk_format_kb "$TOTAL_BEFORE_KB")"
 else
     tadk_success "清理完成"
-    printf '已删除：%d 个目录\n' "$TARGET_COUNT"
-    printf '释放约：%s\n' \
-        "$(tadk_format_kb "$TOTAL_BEFORE_KB")"
+    tadk_label removed "$TARGET_COUNT"
+    tadk_label released "$(tadk_format_kb "$TOTAL_BEFORE_KB")"
 fi
 
 if [[ "$DEEP_CLEAN" == false ]]; then
-    printf '\n提示：使用 tadk clean --deep 可清理项目 .gradle 缓存。\n'
+    printf '\n'
+    tadk_text 'label.clean_hint'
+    printf '\n'
 fi
 
 if [[ -d "$HOME/.gradle/caches" ]]; then
-    printf '全局 Gradle 缓存保留：%s\n' \
-        "$(tadk_human_size "$HOME/.gradle/caches")"
+    tadk_label global_cache_preserved "$(tadk_human_size "$HOME/.gradle/caches")"
 fi

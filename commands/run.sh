@@ -33,64 +33,28 @@ APK_SIZE=""
 RUN_PACKAGE_NAME=""
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk run [选项]
-
-说明：
-  构建 APK，并根据所选模式打开安装界面、通过 ADB 安装，或仅构建。
-
-  如果项目存在 .tadk/project.conf，将使用其中的 module 和 variant。
-  命令行中的 --debug 或 --release 会覆盖配置的 variant。
-
-选项：
-  --build-only       只构建 APK，不打开或安装
-  --install          使用 adb install -r 安装 APK
-  --open             使用 termux-open 打开安装界面（默认）
-  --device SERIAL    指定 ADB 目标设备
-  --debug            构建 Debug APK
-  --release          构建 Release APK
-  --clean            构建前先执行 Gradle clean
-  --logcat           安装并启动后进入应用日志
-  --no-cache         禁用 Gradle 构建缓存
-  --rerun            强制重新执行所有 Gradle 任务
-  --                  将后续参数直接传递给 Gradle
-  -h, --help         显示帮助
-
-优先级：
-  --debug / --release
-      > project.conf 中的 variant
-      > 默认 debug
-
-示例：
-  tadk run
-  tadk run --build-only
-  tadk run --install
-  tadk run --install --device 172.19.0.1:39439
-  tadk run --install --logcat
-  tadk run --release --build-only
-  tadk run --clean -- --stacktrace
-HELP
+    tadk_print_help 'help.run'
 }
 
 run_open_installer() {
     local apk_path="$1"
 
     if tadk_command_exists termux-open; then
-        tadk_info "打开系统安装界面"
+        tadk_info "$(tadk_text 'status.open_installer')"
         termux-open "$apk_path"
     else
-        tadk_warn "未找到 termux-open"
-        printf 'APK 已生成：%s\n' "$apk_path"
+        tadk_warn "$(tadk_text 'status.termux_open_missing')"
+        tadk_text 'status.apk_generated' "$apk_path"
+        printf '\n'
     fi
 }
 
 run_adb_install() {
     local apk_path="$1"
 
-    tadk_info "通过 ADB 安装 APK"
+    tadk_info "$(tadk_text 'status.adb_installing')"
     tadk_adb_install_replace "$apk_path"
-    tadk_success "ADB 安装成功"
+    tadk_success "$(tadk_text 'status.adb_install_success')"
 }
 
 run_resolve_package_name() {
@@ -339,7 +303,9 @@ run_step_report() {
 }
 
 run_step_build_only() {
-    printf '\n仅构建模式，未执行安装。\n'
+    printf '\n'
+    tadk_text 'status.only_build'
+    printf '\n'
 }
 
 run_step_open_installer() {
@@ -363,7 +329,7 @@ run_step_logcat() {
         tadk_die "无法识别应用包名，不能进入日志"
 
     printf '\n'
-    tadk_info "进入应用日志，按 Ctrl+C 停止"
+    tadk_info "$(tadk_text 'status.logcat_enter')"
 
     "$TADK_ROOT/commands/logcat.sh" \
         --package "$RUN_PACKAGE_NAME" \
@@ -371,7 +337,8 @@ run_step_logcat() {
 }
 
 run_step_complete() {
-    printf '\n完成。\n'
+    tadk_text 'status.complete'
+    printf '\n'
 }
 
 workflow_register build run_step_build
@@ -407,24 +374,25 @@ workflow_register complete run_step_complete
 
 tadk_heading "TADK Run"
 tadk_separator
-printf '项目：%s\n' "$PROJECT_ROOT"
+tadk_label project "$PROJECT_ROOT"
 
 if [[ "$CONFIG_LOADED" == true ]]; then
-    printf '配置：%s\n' "$PROJECT_ROOT/.tadk/project.conf"
-    printf '模块：%s\n' "$PROJECT_MODULE"
+    tadk_label config "$PROJECT_ROOT/.tadk/project.conf"
+    tadk_label module "$PROJECT_MODULE"
 else
-    printf '配置：未找到，使用兼容模式\n'
+    tadk_text 'state.compatibility_mode'
+    printf '\n'
 fi
 
-printf '类型：%s\n' "$BUILD_TYPE"
-printf '任务：%s\n' "$BUILD_TASK"
-printf '模式：%s\n' "$INSTALL_MODE"
-printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
-printf '日志：%s\n' "$FOLLOW_LOGCAT"
-printf '清理：%s\n' "$CLEAN_FIRST"
+tadk_label type "$BUILD_TYPE"
+tadk_label task "$BUILD_TASK"
+tadk_label mode "$INSTALL_MODE"
+tadk_label target_device "${DEVICE_SERIAL:-$(tadk_text 'value.default_device')}"
+tadk_label logcat "$FOLLOW_LOGCAT"
+tadk_label clean "$CLEAN_FIRST"
 
 if (( ${#GRADLE_EXTRA_ARGS[@]} > 0 )); then
-    printf '参数：'
+    tadk_text 'label.arguments'
     printf '%q ' "${GRADLE_EXTRA_ARGS[@]}"
     printf '\n'
 fi

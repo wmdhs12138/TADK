@@ -17,42 +17,7 @@ SET_VALUE=""
 POSITIONAL_ARGS=()
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk config show [PROJECT_ROOT]
-  tadk config validate [PROJECT_ROOT]
-  tadk config set module MODULE [PROJECT_ROOT]
-  tadk config set variant debug|release [PROJECT_ROOT]
-  tadk config [选项]
-
-说明：
-  查看、验证或修改当前 Android 项目的 TADK 配置。
-
-  未提供 PROJECT_ROOT 时，从当前目录向上查找项目根目录。
-
-子命令：
-  show                显示项目配置
-  validate            验证项目配置
-  set                 修改 module 或 variant
-
-选项：
-  -h, --help          显示帮助
-
-参数：
-  MODULE              Android Gradle 模块名称
-  PROJECT_ROOT        Android 项目根目录或项目内的任意目录
-
-配置文件：
-  .tadk/project.conf
-
-示例：
-  tadk config show
-  tadk config validate
-  tadk config set module app
-  tadk config set module mobile ~/projects/MyApp
-  tadk config set variant release
-  tadk config set variant debug ~/projects/MyApp/app/src/main
-HELP
+    tadk_print_help 'help.config'
 }
 
 resolve_project_root() {
@@ -121,11 +86,11 @@ show_config() {
 
     tadk_heading "TADK Project Config"
     tadk_separator
-    printf '项目：%s\n' "$project_root"
-    printf '配置：%s\n' "$config_path"
-    printf '版本：%s\n' "$TADK_CONFIG_VERSION"
-    printf '模块：%s\n' "$TADK_CONFIG_MODULE"
-    printf '变体：%s\n' "$TADK_CONFIG_VARIANT"
+    tadk_label project "$project_root"
+    tadk_label config "$config_path"
+    tadk_label version "$TADK_CONFIG_VERSION"
+    tadk_label module "$TADK_CONFIG_MODULE"
+    tadk_label variant "$TADK_CONFIG_VARIANT"
     tadk_separator
 }
 
@@ -145,8 +110,8 @@ validate_config() {
         return $?
 
     tadk_success "项目配置有效：$config_path"
-    printf 'Module: %s\n' "$TADK_CONFIG_MODULE"
-    printf 'Variant: %s\n' "$TADK_CONFIG_VARIANT"
+    tadk_label module "$TADK_CONFIG_MODULE"
+    tadk_label variant "$TADK_CONFIG_VARIANT"
 }
 
 set_config() {
@@ -177,8 +142,8 @@ set_config() {
         return $?
 
     tadk_success "项目配置已更新：$config_path"
-    printf 'Module: %s\n' "$TADK_CONFIG_MODULE"
-    printf 'Variant: %s\n' "$TADK_CONFIG_VARIANT"
+    tadk_label module "$TADK_CONFIG_MODULE"
+    tadk_label variant "$TADK_CONFIG_VARIANT"
 }
 
 while (( $# > 0 )); do

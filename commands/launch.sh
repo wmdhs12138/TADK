@@ -16,33 +16,7 @@ DEVICE_SERIAL=""
 RESTART=false
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk launch [选项] [应用包名]
-
-说明：
-  启动设备上已经安装的 Android 应用。
-  不执行构建，也不执行安装。
-
-选项：
-  --package NAME     指定应用包名
-  --device SERIAL    指定 ADB 目标设备
-  --restart          启动前先强制停止应用
-  -h, --help         显示帮助
-
-包名解析顺序：
-  1. 命令行指定的包名
-  2. project.conf 指定模块的 applicationId
-  3. project.conf 指定模块的 namespace
-  4. 无配置时扫描当前项目的 applicationId 或 namespace
-
-示例：
-  tadk launch
-  tadk launch com.example.app
-  tadk launch --package com.example.app
-  tadk launch --device 172.19.0.1:39439
-  tadk launch --restart
-HELP
+    tadk_print_help 'help.launch'
 }
 
 resolve_package_name() {
@@ -141,9 +115,9 @@ RESOLVED_PACKAGE_NAME="$(
 
 tadk_heading "TADK Launch"
 tadk_separator
-printf '应用包名：%s\n' "$RESOLVED_PACKAGE_NAME"
-printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
-printf '重新启动：%s\n' "$RESTART"
+tadk_label package "$RESOLVED_PACKAGE_NAME"
+tadk_label target_device "${DEVICE_SERIAL:-$(tadk_text 'value.default_device')}"
+tadk_label restart "$RESTART"
 tadk_separator
 printf '\n'
 
@@ -166,4 +140,5 @@ else
     tadk_die "应用启动失败：$RESOLVED_PACKAGE_NAME"
 fi
 
-printf '\n完成。\n'
+tadk_text 'status.complete'
+printf '\n'

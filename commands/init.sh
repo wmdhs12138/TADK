@@ -14,34 +14,7 @@ PROJECT_PATH=""
 MODULE=""
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk init [选项] [PROJECT_ROOT]
-
-说明：
-  在已有 Gradle Android 项目中创建 TADK 项目配置。
-
-  未提供 PROJECT_ROOT 时，从当前目录向上查找项目根目录。
-
-选项：
-  --force             覆盖已有的 .tadk/project.conf
-  --module MODULE     指定 Android application 模块，例如 feature/chat
-  -h, --help          显示帮助
-
-参数：
-  PROJECT_ROOT        Android 项目根目录或项目内的任意目录
-
-生成文件：
-  .tadk/project.conf
-
-示例：
-  tadk init
-  tadk init --force
-  tadk init --module mobile
-  tadk init ~/projects/MyApp
-  tadk init --module feature/chat ~/projects/MyApp
-  tadk init --force ~/projects/MyApp
-HELP
+    tadk_print_help 'help.init'
 }
 
 while (( $# > 0 )); do

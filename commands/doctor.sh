@@ -9,27 +9,7 @@ source "$TADK_ROOT/lib/common.sh"
 source "$TADK_ROOT/lib/doctor.sh"
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk doctor [--json] [PROJECT_ROOT]
-
-说明：
-  检查 Termux Android 开发环境和 Android 项目配置。
-
-  未提供 PROJECT_ROOT 时，检查当前工作目录。
-
-参数：
-  PROJECT_ROOT          Android 项目根目录，默认为当前目录
-
-选项：
-  -h, --help            显示帮助
-  --json                输出机器可读的 JSON 结果
-
-示例：
-  tadk doctor
-  tadk doctor .
-  tadk doctor ~/projects/MyApp
-HELP
+    tadk_print_help 'help.doctor'
 }
 
 JSON_OUTPUT=false

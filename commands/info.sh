@@ -12,16 +12,7 @@ source "$TADK_ROOT/lib/gradle.sh"
 source "$TADK_ROOT/lib/git.sh"
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk info
-
-说明：
-  显示当前 Android 项目的名称、包名、SDK、版本、
-  Gradle、Kotlin、AGP、Git 状态和 APK 信息。
-
-可以从项目根目录或任意子目录执行。
-HELP
+    tadk_print_help 'help.info'
 }
 
 value_or_unknown() {
@@ -30,21 +21,22 @@ value_or_unknown() {
     if [[ -n "$value" ]]; then
         printf '%s\n' "$value"
     else
-        printf 'Unknown\n'
+        tadk_text 'value.unknown'
+        printf '\n'
     fi
 }
 
 print_row() {
     local label="$1"
-    local value="${2:-Unknown}"
+    local value="${2:-$(tadk_text 'value.unknown')}"
 
-    printf '%-18s %s\n' "$label" "$value"
+    printf '%-18s %s\n' "$(tadk_text "info.row.$label")" "$value"
 }
 
 print_section() {
     printf '\n%s%s%s\n' \
         "$TADK_COLOR_BOLD" \
-        "$1" \
+        "$(tadk_text "info.section.$1")" \
         "$TADK_COLOR_RESET"
 
     tadk_thin_separator
@@ -55,7 +47,8 @@ format_apk() {
     local apk_path="$2"
 
     if [[ -z "$apk_path" || ! -f "$apk_path" ]]; then
-        printf 'Not built\n'
+        tadk_text 'info.value.not_built'
+        printf '\n'
         return 0
     fi
 
@@ -66,7 +59,7 @@ format_apk() {
 
     printf '%s (%s)\n' \
         "$relative_path" \
-        "${size:-Unknown size}"
+        "${size:-$(tadk_text 'info.value.unknown_size')}"
 }
 
 if [[ $# -gt 0 ]]; then
@@ -99,7 +92,7 @@ MIN_SDK=""
 TARGET_SDK=""
 VERSION_CODE=""
 VERSION_NAME=""
-COMPOSE_ENABLED="Unknown"
+COMPOSE_ENABLED="$(tadk_text 'value.unknown')"
 
 if [[ -n "$APP_BUILD_FILE" ]]; then
     NAMESPACE="$(
@@ -158,35 +151,36 @@ RELEASE_APK="$(
 tadk_heading "TADK Project Info"
 tadk_separator
 
-print_section "Project"
-print_row "Name" "$(value_or_unknown "$PROJECT_NAME")"
-print_row "Root" "$(tadk_expand_home "$PROJECT_ROOT")"
-print_row "Build file" "$(
+print_section project
+print_row name "$(value_or_unknown "$PROJECT_NAME")"
+print_row root "$(tadk_expand_home "$PROJECT_ROOT")"
+print_row build_file "$(
     if [[ -n "$APP_BUILD_FILE" ]]; then
         printf '%s\n' "${APP_BUILD_FILE#"$PROJECT_ROOT"/}"
     else
-        printf 'Unknown\n'
+        tadk_text 'value.unknown'
+        printf '\n'
     fi
 )"
 
-print_section "Android"
-print_row "Namespace" "$(value_or_unknown "$NAMESPACE")"
-print_row "Application ID" "$(value_or_unknown "$APPLICATION_ID")"
-print_row "Compile SDK" "$(value_or_unknown "$COMPILE_SDK")"
-print_row "Min SDK" "$(value_or_unknown "$MIN_SDK")"
-print_row "Target SDK" "$(value_or_unknown "$TARGET_SDK")"
-print_row "Compose" "$COMPOSE_ENABLED"
+print_section android
+print_row namespace "$(value_or_unknown "$NAMESPACE")"
+print_row application_id "$(value_or_unknown "$APPLICATION_ID")"
+print_row compile_sdk "$(value_or_unknown "$COMPILE_SDK")"
+print_row min_sdk "$(value_or_unknown "$MIN_SDK")"
+print_row target_sdk "$(value_or_unknown "$TARGET_SDK")"
+print_row compose "$COMPOSE_ENABLED"
 
-print_section "Version"
-print_row "Version name" "$(value_or_unknown "$VERSION_NAME")"
-print_row "Version code" "$(value_or_unknown "$VERSION_CODE")"
+print_section version
+print_row version_name "$(value_or_unknown "$VERSION_NAME")"
+print_row version_code "$(value_or_unknown "$VERSION_CODE")"
 
-print_section "Build tools"
-print_row "Gradle" "$(value_or_unknown "$GRADLE_VERSION")"
-print_row "Android Gradle" "$(value_or_unknown "$AGP_VERSION")"
-print_row "Kotlin" "$(value_or_unknown "$KOTLIN_VERSION")"
+print_section build_tools
+print_row gradle "$(value_or_unknown "$GRADLE_VERSION")"
+print_row android_gradle "$(value_or_unknown "$AGP_VERSION")"
+print_row kotlin "$(value_or_unknown "$KOTLIN_VERSION")"
 
-print_section "Git"
+print_section git
 
 if tadk_git_is_repository "$PROJECT_ROOT"; then
     GIT_BRANCH="$(
@@ -205,20 +199,20 @@ if tadk_git_is_repository "$PROJECT_ROOT"; then
         tadk_git_changed_count "$PROJECT_ROOT"
     )"
 
-    print_row "Branch" "$(value_or_unknown "$GIT_BRANCH")"
-    print_row "Commit" "$(value_or_unknown "$GIT_COMMIT")"
+    print_row branch "$(value_or_unknown "$GIT_BRANCH")"
+    print_row commit "$(value_or_unknown "$GIT_COMMIT")"
 
     if [[ "$GIT_STATUS" == "Clean" ]]; then
-        print_row "Status" "Clean"
+        print_row status "$(tadk_text 'info.value.clean')"
     else
-        print_row "Status" "Modified ($GIT_CHANGED files)"
+        print_row status "$(tadk_text 'info.value.modified' "$GIT_CHANGED")"
     fi
 else
-    print_row "Repository" "Not initialized"
+    print_row repository "$(tadk_text 'info.value.not_initialized')"
 fi
 
-print_section "Artifacts"
-print_row "Debug APK" "$(format_apk "$PROJECT_ROOT" "$DEBUG_APK")"
-print_row "Release APK" "$(format_apk "$PROJECT_ROOT" "$RELEASE_APK")"
+print_section artifacts
+print_row debug_apk "$(format_apk "$PROJECT_ROOT" "$DEBUG_APK")"
+print_row release_apk "$(format_apk "$PROJECT_ROOT" "$RELEASE_APK")"
 
 printf '\n'

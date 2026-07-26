@@ -16,31 +16,7 @@ RELATIVE_PATH=false
 SHOW_SIZE=true
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk apk [选项]
-
-说明：
-  查找当前 Android 项目已经生成的 APK。
-  不执行构建、安装或启动。
-
-选项：
-  --debug            查找 Debug APK（默认）
-  --release          查找 Release APK
-  --all              列出所有匹配的 APK
-  --path-only        只输出 APK 路径
-  --relative         使用相对于项目根目录的路径
-  --no-size          不显示 APK 文件大小
-  -h, --help         显示帮助
-
-示例：
-  tadk apk
-  tadk apk --release
-  tadk apk --all
-  tadk apk --all --release
-  tadk apk --path-only
-  tadk apk --path-only --relative
-HELP
+    tadk_print_help 'help.apk'
 }
 
 display_path() {
@@ -79,12 +55,12 @@ display_apk_details() {
             "$apk_path"
     )"
 
-    printf 'APK：%s\n' "$output_path"
-    printf '类型：%s\n' "$detected_type"
+    tadk_label apk "$output_path"
+    tadk_label type "$detected_type"
 
     if [[ "$SHOW_SIZE" == true ]]; then
         apk_size="$(tadk_apk_size "$apk_path" || true)"
-        printf '大小：%s\n' "${apk_size:-未知}"
+        tadk_label size "${apk_size:-$(tadk_text 'value.unknown')}"
     fi
 }
 
@@ -148,7 +124,8 @@ if [[ "$LIST_ALL" == false ]]; then
 
     if [[ "$PATH_ONLY" == false ]]; then
         tadk_separator
-        printf '\n完成。\n'
+        tadk_text 'status.complete'
+        printf '\n'
     fi
 
     exit 0
@@ -168,9 +145,9 @@ fi
 if [[ "$PATH_ONLY" == false ]]; then
     tadk_heading "TADK APK"
     tadk_separator
-    printf '项目：%s\n' "$PROJECT_ROOT"
-    printf '类型：%s\n' "$BUILD_TYPE"
-    printf '数量：%s\n' "$APK_COUNT"
+    tadk_label project "$PROJECT_ROOT"
+    tadk_label type "$BUILD_TYPE"
+    tadk_label count "$APK_COUNT"
     tadk_separator
     printf '\n'
 fi
@@ -201,5 +178,6 @@ done < <(
 )
 
 if [[ "$PATH_ONLY" == false ]]; then
-    printf '完成。\n'
+    tadk_text 'status.complete'
+    printf '\n'
 fi

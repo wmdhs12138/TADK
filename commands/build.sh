@@ -23,36 +23,7 @@ BUILD_TASK=""
 APK_PATH=""
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk build [选项]
-
-说明：
-  构建当前 Android 项目的 APK。
-
-  如果项目存在 .tadk/project.conf，将默认使用其中的 module 和
-  variant。命令行中的 --debug 或 --release 会覆盖配置的 variant。
-
-选项：
-  --debug            构建 Debug APK
-  --release          构建 Release APK
-  --clean            构建前先执行 Gradle clean
-  --no-cache         禁用 Gradle 构建缓存
-  --rerun            强制重新执行所有 Gradle 任务
-  --                  将后续参数直接传递给 Gradle
-  -h, --help         显示帮助
-
-优先级：
-  --debug / --release
-      > project.conf 中的 variant
-      > 默认 debug
-
-示例：
-  tadk build
-  tadk build --release
-  tadk build --clean --no-cache
-  tadk build -- --stacktrace
-HELP
+    tadk_print_help 'help.build'
 }
 
 while (( $# > 0 )); do
@@ -141,21 +112,22 @@ fi
 
 tadk_heading "TADK Build"
 tadk_separator
-printf '项目：%s\n' "$PROJECT_ROOT"
+tadk_label project "$PROJECT_ROOT"
 
 if [[ "$CONFIG_LOADED" == true ]]; then
-    printf '配置：%s\n' "$PROJECT_ROOT/.tadk/project.conf"
-    printf '模块：%s\n' "$PROJECT_MODULE"
+    tadk_label config "$PROJECT_ROOT/.tadk/project.conf"
+    tadk_label module "$PROJECT_MODULE"
 else
-    printf '配置：未找到，使用兼容模式\n'
+    tadk_text 'state.compatibility_mode'
+    printf '\n'
 fi
 
-printf '类型：%s\n' "$BUILD_TYPE"
-printf '任务：%s\n' "$BUILD_TASK"
-printf '清理：%s\n' "$CLEAN_FIRST"
+tadk_label type "$BUILD_TYPE"
+tadk_label task "$BUILD_TASK"
+tadk_label clean "$CLEAN_FIRST"
 
 if (( ${#GRADLE_EXTRA_ARGS[@]} > 0 )); then
-    printf '参数：'
+    tadk_text 'label.arguments'
     printf '%q ' "${GRADLE_EXTRA_ARGS[@]}"
     printf '\n'
 fi
@@ -195,4 +167,5 @@ printf '\n'
 tadk_success "构建成功，用时 ${BUILD_DURATION}s"
 tadk_success "APK：$APK_PATH"
 tadk_success "大小：${APK_SIZE:-未知}"
-printf '\n完成。\n'
+tadk_text 'status.complete'
+printf '\n'

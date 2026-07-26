@@ -1,5 +1,7 @@
 # Termux Android DevKit
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 TADK is a Termux-first Android development toolkit for creating,
 building and maintaining modern Android applications directly
 on ARM64 Android devices.
@@ -37,6 +39,17 @@ recoverable Release bootstrap setup.
 
 This is an alpha release intended for development and deployment in
 Termux on ARM64 Android devices.
+
+## Language support
+
+TADK supports English and Simplified Chinese command-line output. Set
+`TADK_LANG` for a command or export it for the current shell:
+
+    TADK_LANG=en tadk --help
+    TADK_LANG=zh-CN tadk --help
+
+Language resources are stored in [`language/`](language/). When `TADK_LANG`
+is not set, TADK follows the shell locale and falls back to Simplified Chinese.
 
 ## Install and update TADK
 

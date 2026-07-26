@@ -19,24 +19,25 @@ tadk_version() {
 }
 
 usage() {
-    printf '\n%sTADK — Termux Android DevKit%s\n' \
+    printf '\n%s%s%s\n' \
         "$TADK_COLOR_BOLD" \
+        "$(tadk_text 'app.title')" \
         "$TADK_COLOR_RESET"
 
-    printf '版本：%s\n\n' "$(tadk_version)"
+    printf '%s\n\n' "$(tadk_text 'app.version' "$(tadk_version)")"
 
-    printf '用法：\n'
+    printf '%s\n' "$(tadk_text 'app.usage')"
     printf '  tadk <command> [options]\n\n'
 
-    printf '命令：\n'
+    printf '%s\n' "$(tadk_text 'app.commands')"
 
     if ! tadk_command_list "$TADK_ROOT"; then
-        printf '  无法读取命令注册表\n'
+        printf '  %s\n' "$(tadk_text 'app.no_commands')"
     fi
 
-    printf '\n其他：\n'
-    printf '  %-12s %s\n' "help" "显示帮助"
-    printf '  %-12s %s\n' "version" "显示 TADK 版本"
+    printf '\n%s\n' "$(tadk_text 'app.other')"
+    printf '  %-12s %s\n' "help" "$(tadk_text 'app.help')"
+    printf '  %-12s %s\n' "version" "$(tadk_text 'app.version_command')"
 
     printf '\n'
 }
@@ -60,7 +61,7 @@ case "$COMMAND" in
 esac
 
 if ! tadk_command_is_valid_name "$COMMAND"; then
-    tadk_die "无效命令名：$COMMAND"
+    tadk_die "$(tadk_text 'error.invalid_command_name' "$COMMAND")"
 fi
 
 COMMAND_TARGET="$(
@@ -68,7 +69,7 @@ COMMAND_TARGET="$(
 )"
 
 if [[ -z "$COMMAND_TARGET" ]]; then
-    tadk_error "未知命令：$COMMAND"
+    tadk_error "$(tadk_text 'error.unknown_command' "$COMMAND")"
     printf '\n'
     usage
     exit 2

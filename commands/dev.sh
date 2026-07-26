@@ -31,58 +31,7 @@ INSTALL_EXTRA_ARGS=()
 LOGCAT_EXTRA_ARGS=()
 
 usage() {
-    cat <<'HELP'
-用法：
-  tadk dev [选项]
-
-说明：
-  执行完整的 Android 日常开发循环：
-
-    构建
-      → 安装
-      → 清空旧日志
-      → 启动应用
-      → 监听应用日志
-
-  dev 只负责编排现有原子命令，不重复实现底层逻辑。
-
-构建选项：
-  --debug             构建并安装 Debug APK
-  --release           构建并安装 Release APK
-  --clean             构建前执行 Gradle clean
-  --no-cache          禁用 Gradle 构建缓存
-  --rerun             强制重新执行 Gradle 任务
-
-运行选项：
-  --device SERIAL     指定整条开发流程的 ADB 目标设备
-  --no-clear          启动前不清空 Logcat
-  --no-restart        不强制停止旧进程
-  --no-logcat         启动应用后不读取日志
-
-日志选项：
-  --dump              输出当前日志后退出
-  --lines NUMBER      只输出最近指定行数后退出
-  --format FORMAT     设置 Logcat 格式，默认 threadtime
-  --raw-output        Logcat 阶段不显示 TADK 标题
-
-参数透传：
-  --build-arg ARG     向 Gradle 传递一个参数
-  --install-arg ARG   向 adb install 传递一个参数
-  --logcat-arg ARG    向 adb logcat 传递一个参数
-
-其他：
-  -h, --help          显示帮助
-
-示例：
-  tadk dev
-  tadk dev --clean
-  tadk dev --device 172.19.0.1:39439
-  tadk dev --no-logcat
-  tadk dev --lines 200
-  tadk dev --dump --format brief
-  tadk dev --build-arg=--stacktrace
-  tadk dev --logcat-arg='*:W'
-HELP
+    tadk_print_help 'help.dev'
 }
 
 require_option_value() {
@@ -360,23 +309,25 @@ workflow_register_if \
 tadk_heading "TADK Dev"
 tadk_separator
 if [[ "$BUILD_TYPE_EXPLICIT" == true ]]; then
-    printf '构建类型：%s（命令行指定）\n' "$BUILD_TYPE"
+    tadk_text 'state.build_type_explicit' "$BUILD_TYPE"
+    printf '\n'
 else
-    printf '构建类型：由项目配置或默认值决定\n'
+    tadk_text 'state.build_type_configured'
+    printf '\n'
 fi
 
-printf '目标设备：%s\n' "${DEVICE_SERIAL:-ADB 默认设备}"
-printf '构建前清理：%s\n' "$CLEAN_FIRST"
-printf '清空旧日志：%s\n' "$CLEAR_LOGCAT"
-printf '重新启动应用：%s\n' "$RESTART_APP"
-printf '监听日志：%s\n' "$FOLLOW_LOGCAT"
+tadk_label target_device "${DEVICE_SERIAL:-$(tadk_text 'value.default_device')}"
+tadk_label build_clean "$CLEAN_FIRST"
+tadk_label clear_logs "$CLEAR_LOGCAT"
+tadk_label restart_app "$RESTART_APP"
+tadk_label follow_logs "$FOLLOW_LOGCAT"
 
 if [[ "$FOLLOW_LOGCAT" == true ]]; then
-    printf '日志格式：%s\n' "$LOGCAT_FORMAT"
-    printf '日志快照：%s\n' "$DUMP_MODE"
+    tadk_label log_format "$LOGCAT_FORMAT"
+    tadk_label log_snapshot "$DUMP_MODE"
 
     if [[ -n "$LOGCAT_LINES" ]]; then
-        printf '日志行数：%s\n' "$LOGCAT_LINES"
+        tadk_label log_lines "$LOGCAT_LINES"
     fi
 fi
 

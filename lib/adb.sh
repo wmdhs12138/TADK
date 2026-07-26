@@ -70,8 +70,10 @@ tadk_adb_select_unique_ready_device() {
     case "${#ready_serials[@]}" in
         0)
             tadk_error "ADB 设备未连接"
-            printf '未发现已连接并授权的 ADB 设备。\n'
-            printf '请先连接设备并完成调试授权。\n'
+            tadk_text 'adb.no_ready_devices'
+            printf '\n'
+            tadk_text 'adb.connect_authorization_hint'
+            printf '\n'
             return 1
             ;;
 
@@ -81,15 +83,18 @@ tadk_adb_select_unique_ready_device() {
             ;;
 
         *)
-            tadk_error "检测到多个可用 ADB 设备"
+            tadk_error "$(tadk_text 'adb.multiple_devices')"
 
-            printf '可用设备：\n'
+            tadk_text 'label.available_devices' ''
+            printf '\n'
 
             for serial in "${ready_serials[@]}"; do
                 printf '  %s\n' "$serial"
             done
 
-            printf '\n请使用 --device SERIAL 指定目标设备。\n'
+            printf '\n'
+            tadk_text 'adb.device_option_hint'
+            printf '\n'
             return 1
             ;;
     esac
@@ -107,9 +112,10 @@ tadk_adb_require_device() {
     fi
 
     if [[ -n "$TADK_ADB_SERIAL" ]]; then
-        tadk_error "指定的 ADB 设备不可用：$TADK_ADB_SERIAL"
-        printf '当前状态：%s\n' "${adb_state:-未连接}"
-        printf '请检查设备地址、连接状态和调试授权。\n'
+        tadk_error "$(tadk_text 'adb.device_unavailable' "$TADK_ADB_SERIAL")"
+        tadk_label state "${adb_state:-$(tadk_text 'value.unknown')}"
+        tadk_text 'adb.device_check_hint'
+        printf '\n'
         return 1
     fi
 
@@ -119,8 +125,8 @@ tadk_adb_require_device() {
     adb_state="$(tadk_adb_state || true)"
 
     if [[ "$adb_state" != "device" ]]; then
-        tadk_error "自动选择的 ADB 设备不可用：$TADK_ADB_SERIAL"
-        printf '当前状态：%s\n' "${adb_state:-未连接}"
+        tadk_error "$(tadk_text 'adb.device_auto_unavailable' "$TADK_ADB_SERIAL")"
+        tadk_label state "${adb_state:-$(tadk_text 'value.unknown')}"
         return 1
     fi
 }
