@@ -6,6 +6,8 @@ TADK_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEST_ROOT="$(mktemp -d)"
 MOCK_BIN="$TEST_ROOT/bin"
 FIXTURE_ROOT="$TEST_ROOT/TADK-0.3.0-alpha.19"
+OVERWRITE_FIXTURE_ROOT="$TEST_ROOT/overwrite-fixture/TADK-0.3.0-alpha.19"
+SIGNAL_FIXTURE_ROOT="$TEST_ROOT/signal-fixture/TADK-0.3.0-alpha.19"
 ARCHIVE="$TEST_ROOT/TADK-0.3.0-alpha.19-update.zip"
 TEST_HOME="$TEST_ROOT/home"
 
@@ -20,6 +22,8 @@ trap cleanup EXIT
 mkdir -p \
     "$MOCK_BIN" \
     "$FIXTURE_ROOT/release" \
+    "$OVERWRITE_FIXTURE_ROOT/release" \
+    "$SIGNAL_FIXTURE_ROOT/release" \
     "$TEST_HOME"
 
 export HOME="$TEST_HOME"
@@ -28,6 +32,33 @@ printf '0.3.0-alpha.19\n' > "$FIXTURE_ROOT/VERSION"
 sed 's/0\.3\.0-alpha\.18/0.3.0-alpha.19/g' \
     "$TADK_ROOT/release/manifest.json" \
     > "$FIXTURE_ROOT/release/manifest.json"
+
+for consistency_file in \
+    README.md \
+    RELEASE_NOTES.md \
+    VERIFY.md \
+    CHANGELOG.md; do
+    sed 's/0\.3\.0-alpha\.18/0.3.0-alpha.19/g' \
+        "$TADK_ROOT/$consistency_file" \
+        > "$FIXTURE_ROOT/$consistency_file"
+done
+
+cp -a "$FIXTURE_ROOT"/. "$OVERWRITE_FIXTURE_ROOT"/
+mkdir -p "$OVERWRITE_FIXTURE_ROOT/commands" "$OVERWRITE_FIXTURE_ROOT/lib"
+cp "$TADK_ROOT/commands/self-update.sh" \
+    "$OVERWRITE_FIXTURE_ROOT/commands/self-update.sh"
+cp "$TADK_ROOT/lib/self_update.sh" \
+    "$OVERWRITE_FIXTURE_ROOT/lib/self_update.sh"
+printf '\n# self-update integration overwrite marker\n' \
+    >> "$OVERWRITE_FIXTURE_ROOT/commands/self-update.sh"
+printf '\n# self-update integration overwrite marker\n' \
+    >> "$OVERWRITE_FIXTURE_ROOT/lib/self_update.sh"
+
+cp -a "$FIXTURE_ROOT"/. "$SIGNAL_FIXTURE_ROOT"/
+mkdir -p "$SIGNAL_FIXTURE_ROOT/tests"
+printf '#!/usr/bin/env bash\nsleep 5\n' \
+    > "$SIGNAL_FIXTURE_ROOT/tests/smoke.sh"
+chmod +x "$SIGNAL_FIXTURE_ROOT/tests/smoke.sh"
 
 printf 'mock archive payload\n' > "$ARCHIVE"
 
@@ -217,6 +248,102 @@ assert_file_not_exists "$TEST_HOME/.cache/tadk/self-update/update.lock" \
 
 printf 'PASS self-update applies transactionally and preserves user state\n\n'
 
+printf 'TEST self-update applies a payload that overwrites its own updater\n'
+
+OVERWRITE_TARGET="$TEST_ROOT/overwrite-target"
+OVERWRITE_BACKUP="$TEST_ROOT/overwrite-backup"
+prepare_git_target "$OVERWRITE_TARGET"
+export SELF_UPDATE_FIXTURE_ROOT="$OVERWRITE_FIXTURE_ROOT"
+
+set +e
+overwrite_output="$(
+    "$OVERWRITE_TARGET/bin/tadk" \
+        self-update \
+        --apply "$ARCHIVE" \
+        --sha256 "$expected_sha256" \
+        --backup-dir "$OVERWRITE_BACKUP" \
+        --json \
+        2>&1
+)"
+overwrite_status="$?"
+set -e
+
+export SELF_UPDATE_FIXTURE_ROOT="$FIXTURE_ROOT"
+
+assert_equals '0' "$overwrite_status" \
+    'self-overwrite apply should commit the complete transaction'
+assert_equals '1' "$(printf '%s\n' "$overwrite_output" | awk 'NF { count += 1 } END { print count + 0 }')" \
+    'self-overwrite JSON output should contain exactly one object'
+assert_contains "$overwrite_output" \
+    '"name":"apply","status":"pass"' \
+    'self-overwrite apply should report a committed transaction'
+assert_contains "$(< "$OVERWRITE_TARGET/commands/self-update.sh")" \
+    'self-update integration overwrite marker' \
+    'self-overwrite apply should install commands/self-update.sh'
+assert_contains "$(< "$OVERWRITE_TARGET/lib/self_update.sh")" \
+    'self-update integration overwrite marker' \
+    'self-overwrite apply should install lib/self_update.sh'
+assert_file_not_exists "$TEST_HOME/.cache/tadk/self-update/update.lock" \
+    'self-overwrite apply should clean the transaction lock'
+
+printf 'PASS self-update applies a payload that overwrites its own updater\n\n'
+
+printf 'TEST self-update EXIT handler rolls back after TERM\n'
+
+SIGNAL_TARGET="$TEST_ROOT/signal-target"
+SIGNAL_BACKUP="$TEST_ROOT/signal-backup"
+SIGNAL_OUTPUT_FILE="$TEST_ROOT/signal-output"
+prepare_git_target "$SIGNAL_TARGET"
+export SELF_UPDATE_FIXTURE_ROOT="$SIGNAL_FIXTURE_ROOT"
+
+set +e
+"$SIGNAL_TARGET/bin/tadk" \
+    self-update \
+    --apply "$ARCHIVE" \
+    --sha256 "$expected_sha256" \
+    --backup-dir "$SIGNAL_BACKUP" \
+    --json \
+    > "$SIGNAL_OUTPUT_FILE" \
+    2>&1 &
+signal_pid="$!"
+set -e
+
+for attempt in {1..100}; do
+    if [[ -f "$SIGNAL_BACKUP/VERSION" &&
+          "$(tr -d '\r\n' < "$SIGNAL_TARGET/VERSION" 2>/dev/null)" == \
+          '0.3.0-alpha.19' ]]; then
+        break
+    fi
+    sleep 0.1
+done
+
+set +e
+kill -TERM "$signal_pid"
+wait "$signal_pid"
+signal_status="$?"
+set -e
+
+signal_output="$(< "$SIGNAL_OUTPUT_FILE")"
+
+export SELF_UPDATE_FIXTURE_ROOT="$FIXTURE_ROOT"
+
+assert_equals '143' "$signal_status" \
+    'TERM should preserve the unified termination status'
+assert_equals '1' "$(printf '%s\n' "$signal_output" | awk 'NF { count += 1 } END { print count + 0 }')" \
+    'TERM handling should emit exactly one JSON object'
+assert_contains "$signal_output" \
+    '"name":"signal","status":"fail"' \
+    'TERM should be reported in the JSON checks'
+assert_contains "$signal_output" \
+    '"name":"rollback","status":"pass"' \
+    'EXIT handling should complete automatic rollback after TERM'
+assert_equals '0.3.0-alpha.18' "$(tr -d '\r\n' < "$SIGNAL_TARGET/VERSION")" \
+    'TERM should restore the original installation'
+assert_file_not_exists "$TEST_HOME/.cache/tadk/self-update/update.lock" \
+    'TERM handling should clean the transaction lock'
+
+printf 'PASS self-update EXIT handler rolls back after TERM\n\n'
+
 printf 'TEST self-update rejects concurrent transactions\n'
 
 LOCK_DIR="$TEST_HOME/.cache/tadk/self-update/update.lock"
@@ -253,7 +380,7 @@ printf 'TEST self-update automatically rolls back after smoke failure\n'
 ROLLBACK_TARGET="$TEST_ROOT/rollback-target"
 ROLLBACK_BACKUP="$TEST_ROOT/rollback-backup"
 prepare_git_target "$ROLLBACK_TARGET"
-printf '\nexit 1\n' >> "$ROLLBACK_TARGET/tests/smoke.sh"
+printf '\nexit 7\n' >> "$ROLLBACK_TARGET/tests/smoke.sh"
 git -C "$ROLLBACK_TARGET" add tests/smoke.sh 2>/dev/null
 git -C "$ROLLBACK_TARGET" commit -qm 'test failing smoke baseline' 2>/dev/null
 original_smoke_sha256="$(sha256sum "$ROLLBACK_TARGET/tests/smoke.sh" | awk '{print $1}')"
@@ -271,7 +398,7 @@ rollback_output="$(
 rollback_status="$?"
 set -e
 
-assert_equals '1' "$rollback_status" \
+assert_equals '7' "$rollback_status" \
     'smoke failure should fail the apply transaction'
 assert_contains "$rollback_output" \
     '"name":"rollback","status":"pass"' \

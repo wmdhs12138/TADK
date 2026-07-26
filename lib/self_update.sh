@@ -36,6 +36,8 @@ TADK_SELF_UPDATE_ROLLBACK_DONE=false
 TADK_SELF_UPDATE_APPLY_COMPLETED=false
 TADK_SELF_UPDATE_INTERRUPTED=false
 TADK_SELF_UPDATE_JSON_EMITTED=false
+TADK_SELF_UPDATE_EXIT_HANDLING=false
+TADK_SELF_UPDATE_ORIGINAL_EXIT_CODE=0
 declare -a TADK_SELF_UPDATE_CHECKS=()
 
 tadk_self_update_reset() {
@@ -51,6 +53,8 @@ tadk_self_update_reset() {
     TADK_SELF_UPDATE_WARNINGS=0
     TADK_SELF_UPDATE_FAILED=0
     TADK_SELF_UPDATE_JSON_EMITTED=false
+    TADK_SELF_UPDATE_EXIT_HANDLING=false
+    TADK_SELF_UPDATE_ORIGINAL_EXIT_CODE=0
     TADK_SELF_UPDATE_CHECKS=()
 }
 
@@ -466,21 +470,24 @@ tadk_self_update_apply_rollback() {
 }
 
 tadk_self_update_apply_fail_and_rollback() {
-    if (( $# != 3 )); then
+    if (( $# != 4 )); then
         return 64
     fi
 
     local check_name="$1"
     local detail="$2"
     local original_version="$3"
+    local original_status="$4"
 
     tadk_self_update_record_check \
         "$check_name" \
         fail \
         "$detail"
 
+    # Rollback diagnostics are recorded by tadk_self_update_apply_rollback, but
+    # never replace the failure status from the operation that triggered it.
     tadk_self_update_apply_rollback "$original_version" || true
-    return 1
+    return "$original_status"
 }
 
 tadk_self_update_apply() {
@@ -496,6 +503,7 @@ tadk_self_update_apply() {
     local observed_version=""
     local smoke_output=""
     local original_version=""
+    local failure_status=0
 
     TADK_SELF_UPDATE_APPLY_ROOT="$tadk_root"
     TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
@@ -543,11 +551,13 @@ tadk_self_update_apply() {
             pass \
             'archive payload copied with additive/overwrite semantics'
     else
+        failure_status=$?
         tadk_self_update_apply_fail_and_rollback \
             'apply_copy' \
             'archive payload copy failed; automatic rollback started' \
-            "$original_version"
-        return 1
+            "$original_version" \
+            "$failure_status" || true
+        return "$failure_status"
     fi
 
     observed_version="$(
@@ -561,19 +571,23 @@ tadk_self_update_apply() {
             pass \
             "installed VERSION is $observed_version"
     else
+        failure_status=1
         tadk_self_update_apply_fail_and_rollback \
             'post_apply_version' \
             "installed VERSION is ${observed_version:-missing}, expected $TADK_SELF_UPDATE_ARCHIVE_VERSION; automatic rollback started" \
-            "$original_version"
-        return 1
+            "$original_version" \
+            "$failure_status" || true
+        return "$failure_status"
     fi
 
     if [[ ! -x "$tadk_root/tests/smoke.sh" ]]; then
+        failure_status=1
         tadk_self_update_apply_fail_and_rollback \
             'post_apply_smoke' \
             'tests/smoke.sh is missing or not executable; automatic rollback started' \
-            "$original_version"
-        return 1
+            "$original_version" \
+            "$failure_status" || true
+        return "$failure_status"
     fi
 
     if smoke_output="$(bash "$tadk_root/tests/smoke.sh" 2>&1)"; then
@@ -582,11 +596,13 @@ tadk_self_update_apply() {
             pass \
             'TADK smoke tests passed after apply'
     else
+        failure_status=$?
         tadk_self_update_apply_fail_and_rollback \
             'post_apply_smoke' \
             'TADK smoke tests failed; automatic rollback started' \
-            "$original_version"
-        return 1
+            "$original_version" \
+            "$failure_status" || true
+        return "$failure_status"
     fi
 
     TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
@@ -647,6 +663,36 @@ tadk_self_update_cleanup() {
     TADK_SELF_UPDATE_TRANSACTION_ACTIVE=false
 }
 
+tadk_self_update_handle_exit() {
+    local original_status=$?
+
+    if [[ "${TADK_SELF_UPDATE_EXIT_HANDLING:-false}" == true ]]; then
+        return "$original_status"
+    fi
+
+    TADK_SELF_UPDATE_EXIT_HANDLING=true
+    TADK_SELF_UPDATE_ORIGINAL_EXIT_CODE="$original_status"
+
+    if [[ "${TADK_SELF_UPDATE_TRANSACTION_ACTIVE:-false}" == true &&
+          "${TADK_SELF_UPDATE_BACKUP_COMPLETE:-false}" == true &&
+          "${TADK_SELF_UPDATE_APPLY_COMPLETED:-false}" != true &&
+          "${TADK_SELF_UPDATE_ROLLBACK_DONE:-false}" != true ]]; then
+        # Keep the exit status that caused termination even if rollback itself
+        # reports a failure.  The rollback check remains in the result output.
+        tadk_self_update_apply_rollback \
+            "$TADK_SELF_UPDATE_CURRENT_VERSION" || true
+    fi
+
+    if [[ "${TADK_SELF_UPDATE_JSON_OUTPUT:-false}" == true &&
+          "${TADK_SELF_UPDATE_JSON_EMITTED:-false}" != true ]]; then
+        tadk_self_update_print_json || true
+    fi
+
+    tadk_self_update_cleanup
+    TADK_SELF_UPDATE_EXIT_HANDLING=false
+    return "$original_status"
+}
+
 tadk_self_update_handle_signal() {
     if (( $# != 1 )); then
         return 64
@@ -675,22 +721,16 @@ tadk_self_update_handle_signal() {
 
     TADK_SELF_UPDATE_INTERRUPTED=true
 
-    if [[ "${TADK_SELF_UPDATE_TRANSACTION_ACTIVE:-false}" == true &&
-          "${TADK_SELF_UPDATE_ROLLBACK_DONE:-false}" != true &&
-          "${TADK_SELF_UPDATE_BACKUP_COMPLETE:-false}" == true ]]; then
-        tadk_self_update_apply_rollback "$TADK_SELF_UPDATE_CURRENT_VERSION" || true
-    fi
-
     if [[ "${TADK_SELF_UPDATE_JSON_OUTPUT:-false}" == true &&
           "${TADK_SELF_UPDATE_JSON_EMITTED:-false}" != true ]]; then
         tadk_self_update_record_check \
             'signal' \
             fail \
             "self-update interrupted by $signal"
-        tadk_self_update_print_json
-        TADK_SELF_UPDATE_JSON_EMITTED=true
     fi
 
+    # exit invokes the single EXIT handler, which performs rollback, emits
+    # JSON once, cleans temporary state, and restores this status.
     exit "$exit_code"
 }
 

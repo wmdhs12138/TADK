@@ -196,7 +196,10 @@ if [[ "$JSON_OUTPUT" != true ]]; then
     fi
 fi
 
-trap tadk_self_update_cleanup EXIT
+trap tadk_self_update_handle_exit EXIT
+trap 'tadk_self_update_handle_signal INT' INT
+trap 'tadk_self_update_handle_signal TERM' TERM
+trap 'tadk_self_update_handle_signal HUP' HUP
 
 if [[ "$MODE" == check ]]; then
     tadk_self_update_run_check \
@@ -218,10 +221,6 @@ if [[ "$MODE" == check ]]; then
 
     exit 0
 fi
-
-trap 'tadk_self_update_handle_signal INT' INT
-trap 'tadk_self_update_handle_signal TERM' TERM
-trap 'tadk_self_update_handle_signal HUP' HUP
 
 apply_status=0
 if tadk_self_update_apply \
